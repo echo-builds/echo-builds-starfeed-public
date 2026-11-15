@@ -768,6 +768,7 @@ async function searchGitHub(input) {
     clearTimeout(timeout);
     if (!response.ok) throw new Error('Search HTTP ' + response.status);
     const data = await response.json();
+    document.body.dataset.searchDiagnostic = data.diagnostic || data.mode || '';
     if (!Array.isArray(data?.items)) throw new Error('No search results');
     state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
     state.search.hint = data.mode === 'ai'
