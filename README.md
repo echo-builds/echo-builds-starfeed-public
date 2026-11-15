@@ -65,4 +65,4 @@ https://<Vercel 域名>/api/auth/callback
 - 首页底部搜索框支持直接描述需求，例如「找能把播客翻译成中文、最好可以本地运行的项目」。请求发送到 `/api/search`，由服务端模型把自然语言拆成 1–3 条互补的 GitHub 搜索语句，再查询完整 GitHub Search API。
 - 多条搜索结果按仓库合并、排除归档仓库和 Fork，并统一按 Star 从高到低排列；搜索不受首页双列内容限制，也不强制首页的 1000 Star 准入门槛。
 - 模型会为返回项目生成一句中文标题和说明。模型服务暂时不可用时，后端退化为关键词规则，并在页面明确提示，不伪装成智能理解。
-- Vercel 部署优先使用自动提供的 OIDC Token 访问 AI Gateway，也可以配置 `AI_GATEWAY_API_KEY`；模型可用 `SEARCH_MODEL` 替换，默认使用 `alibaba/qwen3.5-flash`。
+- Vercel 部署优先使用自动提供的 OIDC Token 访问 AI Gateway，也可以配置 `AI_GATEWAY_API_KEY`；模型可用 `SEARCH_MODEL` 替换，默认使用 AI Gateway 当前提供的免费轻量模型。
