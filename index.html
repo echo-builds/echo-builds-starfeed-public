@@ -210,7 +210,8 @@ dialog::backdrop{background:#18161280}
     </article>
   </template>
 <script type="module">
-const MIN_STARS = 500;
+const MIN_STARS = 1000;
+const MIN_FORKS = 50;
 const DAY = 86400000;
 const DISCOVERY_WINDOW_DAYS = 14;
 const ignored = new Set(['ai','open-source','javascript','typescript','python','react','opensource','web','app','github','go','rust','self-hosted','nextjs','docker']);
@@ -464,7 +465,8 @@ function enrich(repo) {
     url:'https://github.com/' + repo.full_name};
 }
 const previous = storage.get('recent',null);
-const oldCatalog = Array.isArray(previous?.repos) ? previous.repos.filter(repo=>validRepo(repo) && (guides[repoKey(repo)] || Number(repo.forks_count) >= 10)) : [];
+const oldCatalog = Array.isArray(previous?.repos) ? previous.repos.filter(repo=>validRepo(repo) && (guides[repoKey(repo)] ||
+  (Number(repo.forks_count) >= MIN_FORKS && repo.license?.spdx_id && !['NOASSERTION','OTHER'].includes(repo.license.spdx_id)))) : [];
 const oldSaved = storage.get('saved',[]);
 const metadata = new Map();
 const inFlight = new Map();
@@ -536,13 +538,15 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url} = item;
-  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,license} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,license,approximate:false};
 }
 function credibleRepo(item) {
   const text = `${item.name || ''} ${item.description || ''}`;
   const suspicious = /pre[- ]?activated|full working installer|complete standalone|standalone desktop setup|trainer tool|skin swapper|password recovery|unlocker|keygen|serial key|all features (?:enabled|preconfigured)|ready to run in 2026/i;
-  return validRepo(item) && !item.archived && !item.fork && Number(item.forks_count) >= 10 && !suspicious.test(text);
+  const license = item.license?.spdx_id;
+  return validRepo(item) && !item.archived && !item.fork && Number(item.forks_count) >= MIN_FORKS &&
+    license && !['NOASSERTION','OTHER'].includes(license) && !suspicious.test(text);
 }
 function loadMeta(repo, force = false) {
   const key = repoKey(repo);
@@ -603,13 +607,18 @@ async function loadDiscover({reset = false} = {}) {
     for (let attempt = 0; attempt < 3 && incoming.length === 0; attempt++) {
       const window = previousWindow(cursor);
       const query = new URLSearchParams({
-        q:`is:public archived:false fork:false stars:>=${MIN_STARS} forks:>=10 created:${window.from}..${window.to}`,
+        q:`is:public archived:false fork:false stars:>=${MIN_STARS} forks:>=${MIN_FORKS} created:${window.from}..${window.to}`,
         sort:'stars',order:'desc',per_page:'100'
       });
       const data = await request(API + '/search/repositories?' + query);
       if (!Array.isArray(data?.items)) throw new Error('No projects');
-      incoming = data.items.filter(credibleRepo).map(shape)
-        .sort((a,b)=>Date.parse(b.created_at) - Date.parse(a.created_at) || b.stargazers_count - a.stargazers_count);
+      const names = new Set();
+      incoming = data.items.filter(credibleRepo).filter(item=>{
+        const name = item.name.toLowerCase();
+        if (names.has(name)) return false;
+        names.add(name);
+        return true;
+      }).map(shape).sort((a,b)=>Date.parse(b.created_at) - Date.parse(a.created_at) || b.stargazers_count - a.stargazers_count);
       cursor = window.next;
     }
     const merged = new Map(current.map(repo=>[repoKey(repo),repo]));
