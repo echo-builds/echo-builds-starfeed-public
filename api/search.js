@@ -73,8 +73,8 @@ async function planSearch(req,input) {
     const queries = (Array.isArray(plan.queries) ? plan.queries : []).map(cleanQuery).filter(Boolean).slice(0,3);
     if (!queries.length) throw new Error('empty_queries');
     return {intent:cleanQuery(plan.intent) || input,queries,mode:'ai'};
-  } catch {
-    return fallbackPlan(input);
+  } catch (error) {
+    return {...fallbackPlan(input),aiFallbackReason:String(error?.message || 'ai_unavailable').slice(0,80)};
   }
 }
 
@@ -150,7 +150,7 @@ module.exports = async function handler(req,res) {
     let items = [...merged.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,24);
     if (!items.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     if (plan.mode === 'ai') items = await addChineseCopy(req,input,items);
-    return res.status(200).json({mode:plan.mode,intent:plan.intent,queries:plan.queries,items});
+    return res.status(200).json({mode:plan.mode,intent:plan.intent,queries:plan.queries,diagnostic:plan.aiFallbackReason || null,items});
   } catch {
     return res.status(502).json({error:'search_unavailable'});
   }
