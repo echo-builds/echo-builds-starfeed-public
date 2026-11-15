@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#faf9f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="description" content="发现近期高星 GitHub 项目，收藏你想继续看的产品。">
+  
+  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAD+ElEQVR4nO3dQY7jRgxA0bnSLHP/I+ges88qSUOD6bQhk7KodknFB/y9C+SDAS1U+rH89VM63I/hJ9CtA0ilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUASvrn71/Dz3DlAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAIr6T8/a8JNcNoCiAEoDKAqgNICihgD686O3sAtQ1Pu3+KDn+owAinrn/p7RubghgJ725v2lgK5pCKCnvXN5e/QAdLMuCOiChgB6GkB7Ami7Ny8PoNkCaGcAbQfQzgDaaMj+7qhnAWizawIaPpbNANpo1BYBmqHh/wR3obMG0GPDAd0rgB4D6KUA+tJNn6UHBtCXAHo1gD7bqYeh/wfQZwAdCKDfvaSHoT8B9NEBPQytAfQRQIcD6LgehhaAFoBqdQdU1MNQa0Cn6GluqC+gE/V0NtQU0Ol62hoCCKBSHQF9k56ehtoB+lY9DQ31AvQGPd0MdQH0NjrdGLUANERPE0PzAxqop4OhyQEN1zO9oWkBDUfThNGEgIZDacVoNkDDfXQzNA+g4Sx6MpoB0HAKnRndGNDw3ZN0S0DDN03SLQEN3ytJ9wM0fIXXafgubgBo+JLu1fB9vQPQ8Clr7a6AaLujibsCQur6XG4GqDmm4TOfClAfScMnPDmgWSUNn2c7QHNIGj69YjMAWhtOoRudtXkArQ1n0YfO2myAlssbGj6fc5sQ0NpwKNPTWZsW0NpwNBPTWZsc0HIBQ8Mn8K3ND2jxZup31gLQ4t34b6sLoDV0Tq8XoMX9QGfXDtDihrJT6whocUfieQEEUKmmgBb3RJ9UX0CLm+rPqDWgxbcyynUHtPhaTy2AACoF0Ef0HA6gjwA6HEC/o+dYAH1Gz4EA+gygAwH0JXpeDaAvAfRqAD1Gz0sB9BhALwXQYwC9FEAb0bM/gDYCaH8AbQTQ/gDajp6dAbQdQDsDaDuAdgbQ0+jZE0BPA2hPAD0NoD0B9DSA9gRQFD1pAEUBlAZQFEBpAEUBlAZQFEBpAEUBlAZQEj1xACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKvUvfpkkviK0+s4AAAAASUVORK5CYII=">
+  <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAD+ElEQVR4nO3dQY7jRgxA0bnSLHP/I+ges88qSUOD6bQhk7KodknFB/y9C+SDAS1U+rH89VM63I/hJ9CtA0ilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUASvrn71/Dz3DlAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAIr6T8/a8JNcNoCiAEoDKAqgNICihgD686O3sAtQ1Pu3+KDn+owAinrn/p7RubghgJ725v2lgK5pCKCnvXN5e/QAdLMuCOiChgB6GkB7Ami7Ny8PoNkCaGcAbQfQzgDaaMj+7qhnAWizawIaPpbNANpo1BYBmqHh/wR3obMG0GPDAd0rgB4D6KUA+tJNn6UHBtCXAHo1gD7bqYeh/wfQZwAdCKDfvaSHoT8B9NEBPQytAfQRQIcD6LgehhaAFoBqdQdU1MNQa0Cn6GluqC+gE/V0NtQU0Ol62hoCCKBSHQF9k56ehtoB+lY9DQ31AvQGPd0MdQH0NjrdGLUANERPE0PzAxqop4OhyQEN1zO9oWkBDUfThNGEgIZDacVoNkDDfXQzNA+g4Sx6MpoB0HAKnRndGNDw3ZN0S0DDN03SLQEN3ytJ9wM0fIXXafgubgBo+JLu1fB9vQPQ8Clr7a6AaLujibsCQur6XG4GqDmm4TOfClAfScMnPDmgWSUNn2c7QHNIGj69YjMAWhtOoRudtXkArQ1n0YfO2myAlssbGj6fc5sQ0NpwKNPTWZsW0NpwNBPTWZsc0HIBQ8Mn8K3ND2jxZup31gLQ4t34b6sLoDV0Tq8XoMX9QGfXDtDihrJT6whocUfieQEEUKmmgBb3RJ9UX0CLm+rPqDWgxbcyynUHtPhaTy2AACoF0Ef0HA6gjwA6HEC/o+dYAH1Gz4EA+gygAwH0JXpeDaAvAfRqAD1Gz0sB9BhALwXQYwC9FEAb0bM/gDYCaH8AbQTQ/gDajp6dAbQdQDsDaDuAdgbQ0+jZE0BPA2hPAD0NoD0B9DSA9gRQFD1pAEUBlAZQFEBpAEUBlAZQFEBpAEUBlAZQEj1xACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKvUvfpkkviK0+s4AAAAASUVORK5CYII=">
+  <style>
+:root{color-scheme:light;--paper:#fbfaf7;--white:#fff;--ink:#1b1816;--muted:#655f59;--rule:#ebe5df;--red:#c8302c;font:16px/1.5 "PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Inter,system-ui,sans-serif}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink)}
+[hidden]{display:none!important}
+button,a{-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+.masthead{position:sticky;top:0;z-index:2;background:rgba(251,250,247,.94);border-bottom:1px solid var(--rule);backdrop-filter:blur(12px);padding-top:env(safe-area-inset-top)}
+.header-inner{max-width:1080px;margin:auto;height:54px;display:flex;align-items:center;justify-content:space-between;padding-inline:16px}
+.brand{font-weight:800;display:flex;align-items:center;gap:8px;font-size:18px}
+.brand img{width:28px;height:28px;border-radius:8px}
+.refresh,.close{display:grid;place-items:center;border:0;background:transparent;width:44px;height:44px;border-radius:50%;flex-shrink:0;line-height:1;font-size:23px}
+.refresh:disabled{opacity:.5;cursor:progress}
+main{max-width:1080px;margin:auto;padding:20px 12px calc(148px + env(safe-area-inset-bottom))}
+.heading{padding:0 3px 14px}
+h1{font-size:31px;line-height:1.15;letter-spacing:-.03em;margin:0 0 5px}
+.heading p,.status{font-size:13px;color:var(--muted);margin:0}
+.status{margin:0 3px 11px;font-size:11px}
+.feed{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px 9px}
+.card{background:white;border:1px solid var(--rule);border-radius:11px;min-width:0;overflow:hidden}
+.project{display:block;width:100%;padding:0;border:0;background:none;text-align:left}
+.project:focus-visible{outline-offset:-3px}
+.cover{overflow:hidden;background:#f7efe5}
+.product-image{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:#f3f1ee}
+.text-cover{min-height:0;aspect-ratio:4/5;padding:13px 11px;display:flex;align-items:center;background:#f7ede2 url("data:image/jpeg;base64,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") center/cover}
+.text-cover p{font-size:clamp(13px,3.65vw,18px);line-height:1.52;font-weight:700;margin:0;overflow-wrap:anywhere}
+.text-cover{padding:15px 13px;align-items:center;position:relative;isolation:isolate;overflow:hidden;background:var(--cover-bg,#f3e3d4)}
+.text-cover::before{content:"";position:absolute;inset:0;z-index:-1}
+.text-cover p{line-height:1.48;font-weight:750;letter-spacing:-.015em}
+.cover-tone-0{--cover-bg:#f3ddcc;align-items:flex-end}.cover-tone-0::before{background:radial-gradient(circle at 82% 16%,#d8755e 0 13%,transparent 13.5%),linear-gradient(145deg,transparent 0 66%,#ebc4ae 66%)}
+.cover-tone-1{--cover-bg:#dce7ed;align-items:flex-start}.cover-tone-1::before{background:linear-gradient(90deg,transparent 49%,#b9cbd455 50%,transparent 51%),linear-gradient(0deg,transparent 49%,#b9cbd455 50%,transparent 51%);background-size:25px 25px}
+.cover-tone-2{--cover-bg:#dfe8d5;align-items:center}.cover-tone-2::before{background:radial-gradient(circle at 100% 100%,transparent 0 34%,#afc49d 34.5% 49%,transparent 49.5%)}
+.cover-tone-3{--cover-bg:#e8ddeb;align-items:flex-end}.cover-tone-3::before{background:linear-gradient(125deg,transparent 0 55%,#ceb9d5 55% 68%,transparent 68%),radial-gradient(circle at 18% 18%,#fff8 0 7%,transparent 7.5%)}
+.cover-tone-4{--cover-bg:#eee1b9;align-items:flex-start}.cover-tone-4::before{background:radial-gradient(#b79847 1.2px,transparent 1.5px);background-size:16px 16px;opacity:.42}
+.cover-tone-5{--cover-bg:#dfded8;align-items:center}.cover-tone-5::before{inset:12px;border:1px solid #aaa69b;border-radius:999px;transform:scale(1.35)}
+.card-copy{padding:8px 9px 3px}
+.card-copy h2{font-size:14px;line-height:1.43;margin:0;font-weight:700;overflow-wrap:anywhere}
+.card-meta{min-height:32px;padding:3px 9px 9px;display:flex;justify-content:space-between;align-items:baseline;gap:4px;color:var(--muted);font-size:clamp(9px,2.35vw,11px);font-variant-numeric:tabular-nums}
+.stars{font-weight:650;color:#815121;white-space:nowrap}
+.published{white-space:nowrap}
+.theme-name{margin:0 2px 8px;font-size:17px}
+#groups section+section{margin-top:23px}
+.empty{border:1px dashed var(--rule);border-radius:14px;text-align:center;padding:35px 14px;margin:12px 0;color:var(--muted)}
+.empty h2{color:var(--ink);font-size:18px;margin:0 0 7px}
+.empty p{margin:0 0 14px;font-size:14px}
+.primary,.secondary{font-size:13px;font-weight:700;border-radius:9px;padding:8px 12px;display:inline-flex;align-items:center;justify-content:center;min-height:42px;border:1px solid var(--rule)}
+.secondary{background:#fff}
+.primary{background:var(--red);color:#fff;border-color:var(--red)}
+.save[aria-pressed=true]{color:var(--red)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.search-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(58px + env(safe-area-inset-bottom));z-index:3;width:min(420px,calc(100% - 20px));padding:8px 0}
+.search-dock form{display:flex;align-items:center;gap:5px;min-height:48px;padding:5px 5px 5px 15px;border:1px solid #dfd8d1;border-radius:25px;background:rgba(255,255,255,.97);box-shadow:0 7px 25px #32251b1a;backdrop-filter:blur(14px)}
+.search-dock input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--ink);font:14px/1.4 inherit;padding:7px 0}
+.search-dock input::placeholder{color:#8b847d}
+.search-clear,.search-submit{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border:0;border-radius:50%;font-size:22px;line-height:1}
+.search-clear{background:transparent;color:var(--muted)}
+.search-submit{background:var(--ink);color:#fff;font-size:20px}
+.search-submit:disabled{opacity:.45;cursor:progress}
+.bottom{position:fixed;bottom:0;inset-inline:0;background:rgba(255,255,255,.96);border-top:1px solid var(--rule);z-index:2;padding-bottom:env(safe-area-inset-bottom);backdrop-filter:blur(12px)}
+.bottom div{max-width:420px;margin:auto;display:flex}
+.bottom button{flex:1;display:grid;place-items:center;gap:2px;padding:6px 0;background:none;border:0;color:var(--muted);font-size:11px;font-weight:700}
+.bottom button span{font-size:20px;line-height:23px}
+.bottom button[aria-current=page]{color:var(--red)}
+dialog{border:0;border-radius:0;color:var(--ink);background:#fff;max-width:100%;width:100%;height:100%;max-height:100%;padding:0;margin:0;overflow:auto;overscroll-behavior:contain}
+dialog::backdrop{background:#18161280}
+.dialog-top{position:sticky;top:0;background:white;z-index:1;display:flex;align-items:center;gap:3px;padding:max(env(safe-area-inset-top),4px) 12px 4px;border-bottom:1px solid var(--rule);min-height:51px;font-size:13px;color:var(--muted)}
+.close{font-size:32px}
+#details{padding:20px 17px calc(25px + env(safe-area-inset-bottom));max-width:720px;margin:auto}
+#details h2{font-size:25px;line-height:1.27;margin:0}
+#details .detail-meta{font-size:12px;color:var(--muted);margin:7px 0 22px}
+#details section{margin:0 0 18px}
+#details section h3{font-size:17px;margin:0 0 4px}
+#details section p,#details section li{font-size:14px;line-height:1.68}
+#details section p{margin:0 0 8px}
+#details section ul{margin:7px 0 0;padding-left:1.2em}
+#details section li+li{margin-top:7px}
+#details figure{margin:14px 0 18px}
+#details figure img{display:block;width:100%;max-height:390px;object-fit:contain;border-radius:10px;background:#f3f1ee}
+#details figcaption{font-size:11px;color:var(--muted);margin-top:4px}
+.actions{display:grid;grid-template-columns:1fr 1.08fr .72fr;gap:8px;padding-top:12px;border-top:1px solid var(--rule)}
+.actions>*{min-width:0;padding-inline:7px;text-align:center}
+.save-status{font-size:12px;color:var(--muted)}
+@media(min-width:620px){main{padding:25px 22px 154px}.search-dock{width:min(560px,calc(100% - 40px))}.feed{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card-copy{padding-inline:11px}.card-meta{padding-inline:11px}dialog{border-radius:17px;margin:auto;width:min(650px,calc(100vw - 60px));max-height:88vh;height:auto}#details{padding:25px 25px 28px}}
+@media(min-width:950px){.feed{grid-template-columns:repeat(4,minmax(0,1fr))}.text-cover{padding:16px}.card-copy h2{font-size:16px}}
+
+.feed.masonry{grid-auto-rows:1px;row-gap:0}
+
+</style>
+  <title>星集 · 发现 GitHub 项目</title>
+  
+</head>
+<body>
+  <header class="masthead">
+    <div class="header-inner">
+      <a class="brand" href="./index.html" aria-label="星集首页"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAD+ElEQVR4nO3dQY7jRgxA0bnSLHP/I+ges88qSUOD6bQhk7KodknFB/y9C+SDAS1U+rH89VM63I/hJ9CtA0ilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUASvrn71/Dz3DlAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAIr6T8/a8JNcNoCiAEoDKAqgNICihgD686O3sAtQ1Pu3+KDn+owAinrn/p7RubghgJ725v2lgK5pCKCnvXN5e/QAdLMuCOiChgB6GkB7Ami7Ny8PoNkCaGcAbQfQzgDaaMj+7qhnAWizawIaPpbNANpo1BYBmqHh/wR3obMG0GPDAd0rgB4D6KUA+tJNn6UHBtCXAHo1gD7bqYeh/wfQZwAdCKDfvaSHoT8B9NEBPQytAfQRQIcD6LgehhaAFoBqdQdU1MNQa0Cn6GluqC+gE/V0NtQU0Ol62hoCCKBSHQF9k56ehtoB+lY9DQ31AvQGPd0MdQH0NjrdGLUANERPE0PzAxqop4OhyQEN1zO9oWkBDUfThNGEgIZDacVoNkDDfXQzNA+g4Sx6MpoB0HAKnRndGNDw3ZN0S0DDN03SLQEN3ytJ9wM0fIXXafgubgBo+JLu1fB9vQPQ8Clr7a6AaLujibsCQur6XG4GqDmm4TOfClAfScMnPDmgWSUNn2c7QHNIGj69YjMAWhtOoRudtXkArQ1n0YfO2myAlssbGj6fc5sQ0NpwKNPTWZsW0NpwNBPTWZsc0HIBQ8Mn8K3ND2jxZup31gLQ4t34b6sLoDV0Tq8XoMX9QGfXDtDihrJT6whocUfieQEEUKmmgBb3RJ9UX0CLm+rPqDWgxbcyynUHtPhaTy2AACoF0Ef0HA6gjwA6HEC/o+dYAH1Gz4EA+gygAwH0JXpeDaAvAfRqAD1Gz0sB9BhALwXQYwC9FEAb0bM/gDYCaH8AbQTQ/gDajp6dAbQdQDsDaDuAdgbQ0+jZE0BPA2hPAD0NoD0B9DSA9gRQFD1pAEUBlAZQFEBpAEUBlAZQFEBpAEUBlAZQEj1xACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKvUvfpkkviK0+s4AAAAASUVORK5CYII=" alt=""><span>星集</span></a>
+      <button class="refresh" id="refresh" type="button" aria-label="刷新推荐" title="刷新推荐">↻</button>
+    </div>
+  </header>
+  <main>
+    <section class="heading">
+      <h1 id="heading">推荐</h1>
+      <p id="lede">值得 AI 产品经理逛一逛的开源项目</p>
+    </section>
+    <p id="status" class="status" role="status" hidden></p>
+    <section id="feed" class="feed" aria-label="项目"></section>
+    <div id="groups" hidden></div>
+    <section id="empty" class="empty" hidden><h2></h2><p></p><button class="primary" type="button" hidden>看看推荐</button></section>
+  </main>
+  <section class="search-dock" id="search-dock" aria-label="搜索 GitHub 项目">
+    <form id="search-form" role="search">
+      <label class="sr-only" for="project-search">描述你想找的 GitHub 项目</label>
+      <input id="project-search" type="search" autocomplete="off" enterkeyhint="search" placeholder="告诉我你想找什么项目">
+      <button id="search-clear" class="search-clear" type="button" aria-label="清除搜索" hidden>×</button>
+      <button class="search-submit" type="submit" aria-label="搜索 GitHub">↑</button>
+    </form>
+  </section>
+  <nav class="bottom" aria-label="主导航">
+    <div>
+      <button data-view="discover" type="button" aria-current="page"><span aria-hidden="true">✦</span>发现</button>
+      <button data-view="saved" type="button"><span aria-hidden="true">♡</span>收藏</button>
+    </div>
+  </nav>
+  <dialog id="detail" aria-labelledby="detail-title">
+    <div class="dialog-top"><button class="close" type="button" aria-label="返回">‹</button><span>项目详情</span></div>
+    <div id="details"></div>
+  </dialog>
+  <template id="card-template">
+    <article class="card">
+      <button type="button" class="project">
+        <div class="cover">
+          <div class="text-cover"><p></p></div>
+          <img class="product-image" alt="" decoding="async" hidden>
+        </div>
+        <div class="card-copy"><h2></h2></div>
+        <div class="card-meta"><span class="stars"></span><span class="published"></span></div>
+      </button>
+    </article>
+  </template>
+<script type="module">
+const MIN_STARS = 500;
+const DAY = 86400000;
+const ignored = new Set(['ai','open-source','javascript','typescript','python','react','opensource','web','app','github','go','rust','self-hosted','nextjs','docker']);
+const repoKey = ({full_name}) => full_name.toLowerCase();
+
+function topicsOf(repo) {
+  return [...new Set((repo.topics || []).filter(t => typeof t === 'string' && /^[a-z0-9][a-z0-9-]{1,39}$/.test(t) && !ignored.has(t)))];
+}
+function rank(repos, saved, now = Date.now()) {
+  const read = new Set(saved.map(repoKey));
+  const topicWeights = new Map();
+  const themeWeights = new Map();
+  for (const repo of saved) {
+    const tags = topicsOf(repo);
+    for (const tag of tags) topicWeights.set(tag,(topicWeights.get(tag) || 0) + 1 / Math.sqrt(tags.length));
+    if (repo.theme) themeWeights.set(repo.theme,(themeWeights.get(repo.theme) || 0) + 1);
+  }
+  return repos.filter(repo => repo.stargazers_count >= MIN_STARS).map(repo => {
+    const date = Date.parse(repo.published_at || repo.created_at || repo.observed_at || '');
+    const age = Number.isFinite(date) ? Math.max(0,(now - date) / DAY) : 365;
+    const freshness = 8 / (1 + age / 30);
+    const popularity = Math.log2(repo.stargazers_count / MIN_STARS);
+    const base = freshness + popularity;
+    const interest = topicsOf(repo).reduce((sum, tag) => sum + (topicWeights.get(tag) || 0),0) + (themeWeights.get(repo.theme) || 0);
+    return {repo,age,base,band:Math.floor(base * 4),interest};
+  }).filter(item => item.repo.forPM || (item.interest > 0 && item.age < 90))
+    .sort((a,b) => b.band - a.band || b.interest - a.interest || b.base - a.base || b.repo.stargazers_count - a.repo.stargazers_count)
+    .map(item => item.repo);
+}
+
+function groupSaved(repos) {
+  const groups = new Map();
+  for (const repo of repos) {
+    const theme = repo.theme || '其他项目';
+    if (!groups.has(theme)) groups.set(theme,[]);
+    groups.get(theme).push(repo);
+  }
+  return groups;
+}
+
+function safeUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null;
+  } catch { return null; }
+}
+
+const notes = {
+  'gathin23/cleanyourtv': { title:'给安卓电视换个没广告的桌面', summary:'电脑和电视连上同一个 Wi-Fi，就能停用部分预装应用，再换成类似 Apple TV 的首页。', category:'电视工具', topics:['android-tv','launcher'], cover:'https://raw.githubusercontent.com/Gathin23/cleanyourtv/main/docs/focus-2-up-netflix.png' },
+  'storytold/craft-anything': {
+    published_at:'2026-11-12', title:'给 AI 一个参考产品，让它做出你自己的版本', summary:'选一个网站、App 或游戏。它让 AI 观察界面和操作，再从头做一版并对照检查。', category:'原型工具', topics:['prototyping','coding-agent'],
+    downloadUrl:'https://github.com/storytold/craft-anything/releases/latest', downloadLabel:'下载桌面版',
+    authorSections:[
+      {paragraphs:['看清任意网站、应用或游戏是怎么做的，再让 AI 给你造一个自己的版本；一个纯 Rust 写的开源净室引擎。','把目标指给它，说清你想要什么，它就用真实的检查工具研究原作，让编码 agent 建一个新项目，把结果与原件比对，再反复收敛。']},
+      {heading:'🔍 研究一切',paragraphs:['网站、桌面程序、手机应用、游戏和文件：真实的检查工具弄清它们是怎么搭起来的、做了什么，每个结论都带着证据。']},
+      {heading:'🛠️ 造一个自己的',paragraphs:['说出你要什么（“复刻这个网站”、“用 Rust 复刻这个游戏的玩法”），编码 agent 就按你指定的技术栈建一个新项目。']},
+      {heading:'✅ 比对过，不是猜的',paragraphs:['每个构建都会与原件比对（网页按三种屏宽、游戏跑它自己的自检、应用看它的运行），并反复收敛到足够接近。']},
+      {heading:'工作原理',paragraphs:['把 Craft Anything 指向一个目标，说清你要什么，按下 Start。它分四步走，遇到该你拍板的地方就用大白话问你：'],bullets:['研究： 检查原件：它在各种宽度下的页面、它的代码、它的文件、它怎么运行。','构建： 编码 agent 建一个新项目，用你的请求指定的语言、框架或引擎（没指定就用合理默认）。','检查： 把构建成果与原件比对，列出还不一致的地方。','就绪： 打开、试玩或预览结果，或者继续提要求让它接着收敛。']}
+    ]
+  },
+  'ccch1mneyyy/dsh-go': {
+    published_at:'2026-11-15', title:'在安卓手机上用 DeepSeek 编程助手', summary:'可以在手机上运行，也能连电脑上的助手，在手机里继续对话、看任务进度。', category:'安卓应用', topics:['android','coding-agent'],
+    downloadUrl:'https://github.com/ccch1mneyyy/dsh-Go/releases/latest', downloadLabel:'下载安卓版',
+    authorSections:[
+      {paragraphs:['DeepSeek Harness 的 Android 客户端。手机上直接跑，也能遥控你电脑上的 DSH。']},
+      {heading:'Deepy 和鲸娘，陪你干活',paragraphs:['干活时敲代码，做完来个空翻，等你确认会举手。打开「App 外显示」，它们还会跟你到桌面。']},
+      {heading:'本机运行，也能遥控电脑',paragraphs:['内置 Linux 环境，免 Root、免 Termux。电脑上的 DSH，也能一键切过去接着用。']},
+      {heading:'插话、打断，过程自动收好',paragraphs:['回复中途也能插话，排队的消息随时「立即发送」。做完的过程折叠成一行。']},
+      {heading:'原生界面，也有网页版',paragraphs:['和官方网页版一键切换，停在同一段对话，下次打开还是你上次用的那个。']},
+      {heading:'分享卡、对话回放和链接',paragraphs:['回复一键做成分享卡。整段对话生成链接，对方在浏览器里回放，链接端到端加密。']},
+      {heading:'横屏与平板',paragraphs:['横屏手机和平板重新排版：侧栏常驻，内容居中，弹出键盘也不挤。']}
+    ]
+  },
+  'deepseek-ai/dsh-superagent-prototype': { title:'把 GitHub 上的开发任务交给 AI 处理', summary:'团队可以在 GitHub 上给 AI 派活。它会单独执行任务，并把进度或代码变更回到原讨论。', category:'团队开发', topics:['coding-agent','developer-tools'] },
+  'zagitta/gpu-unlock': { title:'让部分 GeForce 显卡跑 AI 更快', summary:'面向部分 20、30、40 系列显卡，尝试提高训练和生成时的计算速度。实际效果取决于型号和任务。', category:'显卡工具', topics:['gpu','inference'] },
+  'heydamir/unslop': { title:'让 Claude 帮你改掉 AI 生成页面的模板感', summary:'把已有界面交给这个 Claude 技能，它会检查布局、字体和细节，再动手改页面。', category:'界面设计', topics:['design','agent-skills','coding-agent'] },
+  'pengchujin/aerial-tv': { title:'把国产电视首页换成简洁的应用桌面', summary:'首页只放你想要的应用和信号源，还可以用手机整理图标，设置航拍屏保。', category:'电视工具', topics:['android-tv','launcher'] },
+  'amosblomqvist/learnharness': { title:'告诉 AI 你想学什么，让它按基础排课', summary:'从你已经会的内容开始，帮你把目标拆成课程，再按计划讲解。', category:'学习工具', topics:['education','ai-tutor','lesson-planning'] },
+  'zortos293/lichii': { title:'在电脑上实验运行 Switch 2 游戏', summary:'这是还在开发的模拟器。项目有游戏兼容性报告，适合先查想玩的游戏能否跑起来。', category:'游戏工具', topics:['gaming','emulator'] },
+  'l0ng-ai/openidea': { title:'用一款轻量编辑器写代码、调试和看数据库', summary:'沿用 IntelliJ IDEA 常见的快捷键和面板布局，把终端、版本管理和接口测试放在一起。', category:'编程工具', topics:['developer-tools','ide'] },
+  'wangzan101/mika': {published_at:'2026-11-15', title:'让 AI 在安卓手机上帮你操作网页和应用', summary:'用对话交代任务后，可以让助手在手机里操作 App、打开网页或处理文件。', category:'手机助手', topics:['android','automation'] },
+  'xiaoyang111222/cn-math-taxonomy': { title:'找出学生没学会的是哪一步', summary:'把数学、英语和物理知识按学习顺序连起来，配合题目找到学生卡住的地方。', category:'教育数据', topics:['education','knowledge-graph','assessment'] },
+  'patch-gg/pixelfx': { title:'给网页加上像素风动效', summary:'在网页里看不同动效的实际效果，挑一个合适的，再把对应代码用到自己的项目。', category:'界面动效', topics:['design','animation'], trial:'https://patch-gg.github.io/pixelfx/', trialLabel:'查看动效演示', authorSections:[{paragraphs:['244 个像素艺术特效和动画，每一个都是一小段代码。火焰、爆炸、魔法、天气、界面、拾取物、小动物，还有更多。你可以实时播放、换色、镜像，把它们放进浏览器游戏，或者为任意引擎导出精灵图。另有一个 Claude Code 技能，会像挑剔的像素画师那样制作新效果：先起稿、渲染、观察，再反复打磨。']},{heading:'里面有什么',paragraphs:['移动、火焰、爆炸、水、冰、闪电、科幻、近战、冲击、投射物、生成与死亡、奥术、神圣、阴影、状态、自然、天气、界面、拾取物、转场和小动物，共 244 个效果。']}] },
+  'frigadehq/yogurt': {published_at:'2026-11-15', title:'把会议录音变成私密的 AI 笔记', summary:'在电脑上录会议，生成逐字稿和会议笔记。适合想把记录留在自己设备上的人。', category:'会议笔记', topics:['meeting-notes','speech-to-text','transcription'], downloadUrl:'https://github.com/FrigadeHQ/yogurt/releases/latest', downloadLabel:'下载电脑客户端', authorSections:[{paragraphs:['私密的 AI 会议笔记。免费且开源。','Yogurt 录制你的通话，不会让机器人加入会议。']},{heading:'它能做什么',bullets:['实时逐字稿。Yogurt 录制通话，并在你说话时把语音转换成文字。','会议总结。Yogurt 整理对话以及你添加的笔记。','默认私密。音频、逐字稿和 AI 处理都保留在你的电脑上。','免费且开源。无需账号即可使用 Yogurt。','多语言模式可以转写 99 种语言。','可以跨会议回答问题，并链接回来源。']}] },
+  'fujiwarachoki/supoclip': { title:'让 AI 从长视频里挑高光，自动剪成带字幕的短视频', summary:'给它一段长视频，就能挑出值得单独发布的片段，并生成字幕和标题。', category:'视频剪辑', topics:['video-editing','speech-to-text','transcription'], trial:'https://www.supoclip.com/', trialLabel:'在线体验', authorSections:[{paragraphs:['SupoClip 是一个开源的 AI 视频切片工具。给它一段长视频——播客、演讲或直播回放——它会找出最有传播潜力的片段并评分，再渲染成 9:16 竖屏视频，包含以人脸为中心的裁切、逐词同步字幕、钩子标题和可选的补充画面。你可以自己运行、定制和检查它，也可以使用托管版本省去配置。']},{heading:'功能',bullets:['支持 YouTube、Twitch、Kick 和文件上传。','AI 从逐字稿中选出 3–7 个片段。','每个片段都会得到传播力评分。','人脸检测让说话者保持在竖屏画面中央。','逐词同步字幕。','内置编辑器。','平台表现数据会回流并指导之后的片段选择。']}] },
+  'hkuds/deeptutor': {
+    published_at:'2026-11-06',
+    title:'上传学习资料，让 AI 老师按你的节奏带着学',
+    summary:'导入资料后可以围绕原文提问，也能让 AI 用引导式问题带你读懂难点。',
+    category:'学习工具',
+    topics:['education','rag','ai-tutor'],
+    cover:'https://deeptutor.info/screenshots/dev/overview.png',
+    productUrl:'https://deeptutor.info/',
+    productLabel:'产品说明',
+    downloadUrl:'https://github.com/HKUDS/DeepTutor/releases/latest',
+    downloadLabel:'下载桌面版',
+    authorSections:[
+      {heading:'✨ 核心功能',paragraphs:['DeepTutor 是一个智能体原生的学习工作区，将辅导、解题、测验生成、研究、可视化和掌握度练习整合在一个可扩展的系统中。'],bullets:[
+        '统一的运行时 — Chat、Ask Questions、Quiz、Research、Visualize、Solve、Course Study、Mastery Path、Immersive Reading 和 Audio Overview 共享同一套能力运行时与会话上下文，同时保留各自为特定用途设计的循环和流水线。',
+        'Task Board — 在待办、进行中和已完成三个状态中追踪学习任务，支持添加备注、拖放或使用键盘可操作的移动按钮，并可从归档中恢复任务。卡片保留在当前工作区，沿用现有的外观和语言设置，无需配置模型。',
+        '互联的学习上下文 — 知识库、书籍、Co-Writer 草稿、笔记本、题库、人格预设和 Memory 可在支持它们的工作流中复用，并受账号授权与学习策略约束。',
+        '沉浸式视频学习 — 将 YouTube 或 Bilibili 链接添加到 Reading，即可使用原生播放、转录搜索、基于时间戳的辅导、已保存的笔记和可续接的进度；YouTube 字幕和浏览功能可以使用由管理员配置的 Invidious 实例。',
+        '子智能体与 Partners — 在 Chat 中调用实时智能体运行框架（Claude Code、Codex、Grok CLI、Antigravity、Kimi、opencode、MiMo、Hermes、OpenClaw 或 DeepSeek）或 Partner、导入历史对话，并让持久化 IM 伴侣运行在同一套大脑之上。',
+        '多引擎知识库 — 跨 LlamaIndex、PageIndex、GraphRAG、LightRAG、远程 LightRAG Server、自托管的 WeKnora 知识库、Tencent IMA 或 MarginNote 4 知识库、已连接的 Kiwix ZIM 归档，或链接的 Obsidian vault 的版本化 RAG 知识库，支持可插拔的文档解析。详见原生 LightRAG 角色模型，了解独立的抽取、查询与视觉设置、仅默认创建以及确认后的重建。',
+        '可扩展工具与技能 — 内置工具、MCP 服务器、CLI 应用、图像 / 视频 / 语音生成模型，以及从 EduHub 安装的社区技能。',
+        '可审计的记忆 — L1 追踪、L2 表面摘要和 L3 综合让个性化透明可编辑；Memory Graph 将 L2 事实关联至 L1 证据，并将 L3 综合关联至参与的表面层。'
+      ]}
+    ]
+  },
+  'langgenius/dify': {
+    title:'用拖拽画布搭一个能读文档的 AI 工作流', summary:'把检索资料、调用模型和生成回答连起来，可以做内部知识库问答或客服原型。', category:'工作流', topics:['workflow','rag','llm'], cover:'https://www.dify.ai/_astro/workflow.Dl7EY_X1_rPiFq.webp', trial:'https://cloud.dify.ai/', trialLabel:'打开 Dify Cloud',
+    authorSections:[
+      {paragraphs:['Dify 是一个开源的 LLM 应用开发平台。其直观的界面结合了 AI 工作流、RAG 管道、Agent、模型管理、可观测性功能等，让您可以快速从原型到生产。以下是其核心功能列表：'],ordered:true,bullets:[
+        '工作流: 在画布上构建和测试功能强大的 AI 工作流程，利用以下所有功能以及更多功能。',
+        '全面的模型支持: 与数百种专有/开源 LLMs 以及数十种推理提供商和自托管解决方案无缝集成，涵盖 GPT、Mistral、Llama3 以及任何与 OpenAI API 兼容的模型。完整的支持模型提供商列表可在此处找到。',
+        'Prompt IDE: 用于制作提示、比较模型性能以及向基于聊天的应用程序添加其他功能（如文本转语音）的直观界面。',
+        'RAG Pipeline: 广泛的 RAG 功能，涵盖从文档摄入到检索的所有内容，支持从 PDF、PPT 和其他常见文档格式中提取文本的开箱即用的支持。',
+        'Agent 智能体: 您可以基于 LLM 函数调用或 ReAct 定义 Agent，并为 Agent 添加预构建或自定义工具。Dify 为 AI Agent 提供了 50 多种内置工具，如谷歌搜索、DALL·E、Stable Diffusion 和 WolframAlpha 等。',
+        'LLMOps: 随时间监视和分析应用程序日志和性能。您可以根据生产数据和标注持续改进提示、数据集和模型。',
+        '后端即服务: 所有 Dify 的功能都带有相应的 API，因此您可以轻松地将 Dify 集成到自己的业务逻辑中。'
+      ]}
+    ]
+  },
+  'flowiseai/flowise': { title:'在画布上搭一个能做多步任务的 AI 助手', summary:'让助手先理解问题、再查资料、最后回复，每一步都能在画布上单独测试。', category:'工作流', topics:['workflow','rag','llm'], cover:'https://flowiseai.com/_next/image?q=75&url=/_next/static/media/feature1.83a09941.png&w=1080' },
+  'excalidraw/excalidraw': { title:'打开网页就能画手绘风流程图和产品草稿', summary:'鼠标拖几个框和箭头，几分钟就能画出一张方便分享和讨论的草稿。', category:'设计工具', topics:['whiteboard','design','diagramming'], trial:'https://excalidraw.com/', trialLabel:'在线体验', authorSections:[{paragraphs:['一款开源的手绘风虚拟白板。','支持协作，并采用端到端加密。','创建漂亮的手绘风图表、线框图，或者任何你喜欢的内容。']},{heading:'功能',bullets:['免费且开源。','基于无限画布的白板。','手绘风格。','深色模式。','可以定制。','支持图片和形状库。','导出到 PNG、SVG 和剪贴板。','实时协作。','端到端加密。','本地优先。']}] },
+  'louislam/uptime-kuma': { title:'一页看清网站有没有挂，异常时自动通知你', summary:'填入要监控的网站地址，它会定时检查是否正常，还能展示独立的服务状态页。', category:'监控工具', topics:['monitoring','status-page'], cover:'https://user-images.githubusercontent.com/1336778/212262296-e6205815-ad62-488c-83ec-a5b0d0689f7c.jpg', trial:'https://demo.kuma.pet/start-demo', trialLabel:'在线体验', authorSections:[{paragraphs:['Uptime Kuma 是一款易于使用的自托管监控工具。']},{heading:'⭐ 功能',bullets:['监控 HTTP(s)、TCP、WebSocket、Ping、DNS 记录和 Docker 容器的可用性。','美观、响应迅速且快速的界面和使用体验。','支持 90 多种通知服务。','最低 20 秒的检查间隔。','支持多个状态页。','Ping 图表。','证书信息。','代理支持。','支持双重验证。']}] },
+  'libretranslate/libretranslate': {
+    title:'给自己的产品加上多语言翻译', summary:'把翻译服务装在自己的服务器上，其他应用把文字交给它就能拿到译文。', category:'翻译工具', topics:['translation','machine-translation'],
+    trial:'https://libretranslate.com/', trialLabel:'在线体验', productUrl:'https://docs.libretranslate.com/', productLabel:'使用说明',
+    authorSections:[
+      {paragraphs:['LibreTranslate 是一个完全自行托管的自由开源机器翻译 API。与其他 API 不同，它不依赖 Google 或 Azure 等专有软件来执行翻译。相反，它的翻译引擎由开源的 Argos Translate 库提供支持。']}
+    ]
+  },
+  'penglonghuang/chinese-novelist-skill': { title:'用 AI 从大纲开始写一部长篇中文小说', summary:'输入题材或想法，先整理世界观和故事大纲，再逐章写正文。', category:'写作工具', topics:['writing','fiction','agent-skills'] },
+  'meta/astryx': {
+    published_at:'2026-11-14', title:'用现成组件把产品界面做得更统一', summary:'提供现成的界面组件和设计规范，帮助不同团队做出风格一致的产品。', category:'设计工具', topics:['design','design-system','ui-components'],
+    trial:'https://astryx.atmeta.com/sandbox/', trialLabel:'在线体验组件', productUrl:'https://astryx.atmeta.com/', productLabel:'查看组件文档',
+    authorSections:[
+      {paragraphs:['Astryx 是一个完全可定制的开源设计系统，专为我们现在的构建方式而打造：由人和与他们并肩工作的智能体共同构建。']},
+      {heading:'概览',paragraphs:['Astryx 是一个开源设计系统，它在 Meta 内部发展了八年，成为公司内使用最广泛、规模最大的设计系统——为 13,000 多个应用提供支持，并由每天依赖它的工程师、设计师和产品团队共同塑造。','它将 150 多个无障碍组件、品牌级主题、深色模式、可直接发布的模板和 CLI 整合在一个统一的系统中。你导入预构建的 CSS 并使用有类型定义的 React 组件——无需构建插件，也无需采用新的样式库——人和 AI 助手使用相同的工具进行构建。','Astryx 的不同之处：']},
+      {bullets:['开放的内部结构。组件可以在任何层级组合，而不是被封装在封闭的顶层 API 之后。你会直接使用的构建块都会导出；需要更深入时，swizzle 会将组件的完整源码弹出到你的项目中，由你接管。','不锁定样式。Astryx 使用 StyleX 编写样式，但这对使用者不可见。可以使用 Tailwind、CSS Modules 或普通 CSS，通过 className 覆盖——无论你的项目已经使用什么。','无需包裹即可定制。主题是一组 CSS 自定义属性覆盖，因此设计师无需分叉或包裹组件源码，就能让 Astryx 呈现出明确的自有风格。','为人和智能体构建。API、文档和 CLI 被一同设计，使人和 AI 助手以相同方式、从同一份参考出发进行构建。']}
+    ]
+  },
+  'deepseek-ai/deepinfer': { title:'帮工程团队在多张显卡上跑 DeepSeek', summary:'让团队能够用多张 GPU 运行 DeepSeek 模型。适合负责模型部署的工程团队。', category:'模型工具', topics:['llm','inference'] },
+  'clementtsang/bottom': { title:'在终端里看 CPU、内存和进程的监控面板', summary:'在一个终端窗口里看资源占用，快速定位是哪一个进程拖慢了电脑。', category:'监控工具', topics:['monitoring','terminal'] },
+  'jgraph/drawio': { title:'用浏览器画流程图、架构图和原型图', summary:'拖拽图形就能表达流程和系统关系，画完可以导出再发给同事。', category:'设计工具', topics:['diagramming','whiteboard','design'], trial:'https://app.diagrams.net/', trialLabel:'在线体验', authorSections:[{heading:'关于',paragraphs:['draw.io 是一款可配置的图表和白板应用，由 draw.io Ltd（之前名为 JGraph）和 draw.io AG 共同拥有和开发。我们还在 https://app.diagrams.net 运行生产版本。']},{heading:'范围',paragraphs:['draw.io 是一款图表和白板应用，不是 SVG 编辑器。SVG 导出用于嵌入网页，而不是在其他工具中编辑。','请注意，这个版本的 draw.io 目前不支持实时协作编辑。']}] }
+};
+
+const snapshotDate = '2026-11-15';
+const dailyProjects = [
+  ['Gathin23/cleanyourtv',58000],
+  ['storytold/craft-anything',33100],
+  ['ccch1mneyyy/dsh-Go',23200],
+  ['deepseek-ai/dsh-superagent-prototype',22900],
+  ['Zagitta/gpu-unlock',18400],
+  ['heydamir/unslop',15700],
+  ['pengchujin/aerial-tv',11900],
+  ['amosblomqvist/learnharness',9500],
+  ['zortos293/Lichii',9200],
+  ['wangzan101/Mika',8700],
+  ['xiaoyang111222/cn-math-taxonomy',8100],
+  ['patch-gg/pixelfx',7500],
+  ['meta/astryx',28300],
+  ['louislam/uptime-kuma',94300],
+  ['hkuds/deeptutor',59300],
+  ['fujiwarachoki/supoclip',3100],
+  ['frigadehq/yogurt',1500],
+  ['libretranslate/libretranslate',17700],
+  ['penglonghuang/chinese-novelist-skill',4900],
+  ['deepseek-ai/deepinfer',25953]
+];
+function example([full_name,stargazers_count]) {
+  return {full_name, name:full_name.split('/')[1], stargazers_count, approximate:true};
+}
+const snapshot = dailyProjects.map(example);
+const examples = [
+  ['langgenius/dify',160807], ['flowiseai/flowise',55600], ['excalidraw/excalidraw',136000], ['jgraph/drawio',44000]
+].map(example);
+
+
+// The first field is the Chinese collection theme. The second controls cold start.
+const guides = {
+  'storytold/craft-anything':['产品设计与原型',true,'先选一个想参考的网站或应用，再告诉它你想保留哪段体验。它会观察界面和操作、生成自己的实现，并和参考版本对照。','做竞品走查时，可以看它如何把界面观察转成可验证的原型。','从一个公开网页的一段流程试起，例如首页到搜索结果，先验证能否复现关键交互。'],
+  'deepseek-ai/dsh-superagent-prototype':['AI 助手',true,'给它一个项目和一条开发任务，例如修复一个可复现的问题。它会准备独立的工作空间、执行任务，再在原讨论里提交进展或改动。','适合观察团队怎样给 AI 分配工作、查看进展和接手需要人工判断的任务。','这是团队开发原型。先看项目演示和使用说明，再选一个非关键任务评估。'],
+  'ccch1mneyyy/dsh-go':['AI 助手',true,'在安卓手机打开对话，可以让助手直接在手机环境运行，也可以连家里或办公室电脑上的助手。两种方式都在同一个聊天界面里。','值得看它怎样在移动端交代任务、接续电脑上的工作和反馈执行状态。','在安卓设备上体验。首次使用需要选择运行方式，并配置可用的模型。'],
+  'heydamir/unslop':['产品设计与原型',true,'把已有的网页交给 Claude，先检查字体层级、间距和页面结构，再直接修改实现。','适合已有可运行原型、需要快速改一轮界面的人。可以专门观察它怎样识别并处理风格问题。','用一页没有敏感数据的原型，留一张改前截图，再对比可读性与操作动线。'],
+  'amosblomqvist/learnharness':['AI 学习',true,'输入你现在会什么、想学到什么程度。它把差距拆成课程，给出学习顺序，再按计划讲解。','适合研究 AI 教学怎么安排长期任务，以及如何让学习者理解下一步为什么学这个。','用一个具体目标试，例如从能做一元一次方程到会列方程解应用题，检查课程安排是否符合起点。'],
+  'wangzan101/mika':['AI 助手',true,'在安卓手机上交代一个任务，助手可以在支持的情况下操作 App、网页或文件，也能在聊天里反馈它做到了哪一步。','适合看手机助手如何展示执行进度、承接临时指令，以及在需要用户介入时交还操作。','先用一个可撤销的任务试，例如在网页里查信息，操作手机 App 需要额外配置。'],
+  'xiaoyang111222/cn-math-taxonomy':['AI 学习',true,'项目把课标知识点和先修关系做成可查询的数据。给学生出题后，可以沿着关系向前找，区分当前题没懂和前面基础没掌握。','适合研究自适应诊断、学习规划和错题复习，尤其是系统怎么解释为什么推荐这道题。','从一个知识点和它的前置链路入手，再看项目附带的数据与诊断程序。'],
+  'patch-gg/pixelfx':['产品设计与原型',true,'在线浏览像素风动效，能直接看每个效果怎么变化。选中一个效果后，可以取对应代码放进网页。','适合找创意交互和视觉风格参考，也适合快速对比哪种动效更符合原型。','点开在线演示，从一个按钮或开场过渡开始试。'],
+  'frigadehq/yogurt':['工作效率',true,'在电脑上记录会议音频，让工具转成逐字稿，再整理成可回看的笔记。项目强调记录留在自己的设备上。','适合访谈、评审和需求对齐。可以比较笔记生成后有没有清楚保留决定、分歧和后续事项。','用一段公开或已获许可的短录音试，核对人名和关键决定是否准确。'],
+  'fujiwarachoki/supoclip':['内容创作',true,'导入一段长视频后，它会选出适合独立观看的片段，自动生成字幕和标题，方便继续剪辑或发布。','适合研究 AI 视频剪辑怎样处理从素材到可发布内容的过程。','用一段公开采访试，先看它选中的高光能否独立讲明白，再检查字幕和标题。'],
+  'hkuds/deeptutor':['AI 学习',true,'把课程讲义或学习资料放进去，围绕原文提问。遇到读不懂的一段时，可以让它追问、拆解概念，顺着资料继续学。','适合研究 AI 老师如何在答疑和引导之间切换，也值得看它怎么把解释和原文对应起来。','拿一份公开讲义试同一个概念，分别问直接解释和一步步带我理解，对比两条路径。'],
+  'langgenius/dify':['AI 应用搭建',true,'在画布上连接资料检索、模型和回答步骤。给它一组文档，就可以搭出一个根据资料答问题的应用。','适合用很小的投入验证知识库问答、客服或内部助手，和工程一起确认哪些环节真正需要 AI。','用几页公开资料搭个问答，分别问资料中有答案和没有答案的问题。'],
+  'flowiseai/flowise':['AI 应用搭建',true,'在画布上把模型、能调用的工具和资料库连起来，再在同一界面试运行。可以逐段调整一个助手怎样完成任务。','适合做需要工具调用或多步处理的助手原型，并观察每个步骤出了问题后怎样排查。','先做一个两步流程，给它一个输入，再测试调用的工具失败时用户会看到什么。'],
+  'excalidraw/excalidraw':['产品设计与原型',true,'打开网页就能拖出框、箭头和文字，画成手绘风白板，方便把草稿发给同事。','适合快速讨论初版流程和页面关系，也适合临时说明一个交互分支。','直接在线画一条三步流程，用简单的箭头和文本把一次页面跳转讲清楚。'],
+  'penglonghuang/chinese-novelist-skill':['内容创作',true,'给它一个题材或几条灵感，先安排人物、世界观和大纲，再按章节补写正文。','适合观察 AI 怎么在长任务里保持人物和设定一致，以及把哪些环节留给作者确认。','用一个三章短故事做样例，对比大纲调整后后续章节是否会跟着改。'],
+  'meta/astryx':['产品设计与原型',true,'它提供一套可直接复用的界面组件和风格规范，帮助团队在做新页面时沿用一致的视觉与交互。','适合需要和设计、开发一起讨论产品规范的人，也适合参考组件是怎样被展示和组织的。','先挑一个列表或表单，看看现成组件是否覆盖空状态、报错和禁用等常见情况。'],
+  'gathin23/cleanyourtv':['生活应用',false,'在同一 Wi-Fi 下连接电脑和电视，停用部分电视预装应用，再替换电视首页。换好后，常用应用可以集中显示。','适合不喜欢电视首页有太多广告或推荐内容的安卓电视用户。','先在项目官网对照支持的电视型号。项目页面提供更换后首页的截图。'],
+  'pengchujin/aerial-tv':['生活应用',false,'给电视设置一个只展示应用、输入源、壁纸和航拍屏保的首页。还可以用手机整理电视图标。','适合想简化电视首页、经常在不同应用或游戏机之间切换的人。','到项目主页对照设备型号，先看更换前后的对照图。'],
+  'zortos293/lichii':['游戏与娱乐',false,'在电脑上尝试运行 Switch 2 游戏。项目仍处于实验阶段，成功运行与否取决于游戏和设备。','适合关注模拟器与游戏兼容性的人。','先看项目提供的兼容性报告，确认感兴趣的游戏是否已有测试。'],
+  'deepseek-ai/deepinfer':['模型部署',false,'它提供运行 DeepSeek 模型的底层组件，把计算任务分给多张显卡，面向需要大量处理模型请求的工程团队。','适合评估模型能不能在自己的计算资源上稳定运行，以及模型吞吐怎样随规模变化。','先查看项目支持的模型和环境，再让熟悉模型部署的人评估。'],
+  'zagitta/gpu-unlock':['模型部署',false,'它尝试提高部分 GeForce 显卡在 AI 训练和生成任务里的速度。收益会随显卡型号和任务而变。','适合关心本地模型运行性能的用户。','先在项目说明里核对支持的型号与测试条件。'],
+  'louislam/uptime-kuma':['工作效率',false,'填几个站点地址，让它定时探测能否打开。站点出问题时会提醒，也能生成一页独立的服务运行状态。','适合团队想快速知道测试站或线上服务是否正常。','先用三条测试地址建监控，观察异常通知是否能定位到具体服务。'],
+  'libretranslate/libretranslate':['内容创作',true,'把翻译服务部署在自己的服务器。其他应用可以把文本发给它，接收译文。','适合验证多语言功能，以及希望自己掌握文本处理流程的产品团队。','选几条真实产品文案比较译文，尤其检查专有词和短按钮。'],
+  'l0ng-ai/openidea':['编程工具',false,'把写代码、调试、终端、版本管理和接口测试放在一个应用里，布局延续熟悉的开发工具风格。','适合需要在一个窗口处理完整开发任务的工程师。','先到项目主页看界面，再用小项目试打开、编辑和运行。'],
+  'clementtsang/bottom':['编程工具',false,'在一个窗口看电脑的处理器、内存和程序各自的占用情况，帮助定位资源被谁用掉了。','适合需要查电脑变慢原因的工程师。','按项目说明打开后，对比启动一个占资源的程序前后。'],
+  'jgraph/drawio':['产品设计与原型',true,'拖动形状和连线来表达页面流程、团队协作步骤或系统关系，可以导出图片分享。','适合需要画结构清晰流程图的产品团队。','打开在线编辑器，试画三步用户流程并导出。']
+};
+
+
+const API = 'https://api.github.com';
+const ACCEPT = {Accept:'application/vnd.github+json'};
+const $ = selector => document.querySelector(selector);
+const compact = new Intl.NumberFormat('zh-CN',{notation:'compact',maximumFractionDigits:1});
+const exact = new Intl.NumberFormat('zh-CN');
+const dateKey = (date = new Date()) => date.toLocaleDateString('sv-SE',{timeZone:'Asia/Shanghai'});
+const displayDate = date => date.length === 10 ? date : dateKey(new Date(date));
+const dateLabel = repo => repo.published_at ? '发布于 ' + displayDate(repo.published_at) :
+  repo.created_at ? '创建于 ' + displayDate(repo.created_at) : '日期暂缺';
+const today = () => dateKey();
+const storage = {
+  get(key,fallback) {
+    try { return JSON.parse(localStorage.getItem('starfeed:' + key)) ?? fallback; } catch { return fallback; }
+  },
+  put(key,value) {
+    try { localStorage.setItem('starfeed:' + key,JSON.stringify(value)); return true; } catch { return false; }
+  }
+};
+const validRepo = repo => repo && typeof repo.full_name === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo.full_name);
+function enrich(repo) {
+  const key = repoKey(repo);
+  const note = notes[key] || {};
+  const [theme,forPM,what,why,tryIt] = guides[key] || [];
+  const topics = Array.isArray(repo.topics) ? repo.topics : [];
+  return {...repo,...note,published_at:repo.published_at || note.published_at,theme,forPM,what,why,tryIt,topics:[...new Set([...topics,...(note.topics || [])])],
+    url:'https://github.com/' + repo.full_name};
+}
+const previous = storage.get('recent',null);
+const oldCatalog = Array.isArray(previous?.repos) ? previous.repos.filter(validRepo) : [];
+const oldSaved = storage.get('saved',[]);
+const metadata = new Map();
+const inFlight = new Map();
+const previousMeta = storage.get('project-dates-v1',[]);
+if (Array.isArray(previousMeta)) for (const entry of previousMeta) {
+  if (Array.isArray(entry) && typeof entry[0] === 'string' && entry[1]?.checked) metadata.set(...entry);
+}
+const state = {
+  view:'discover',
+  catalog:oldCatalog,
+  date:oldCatalog.length ? previous.date : snapshotDate,
+  source:oldCatalog.length ? 'cache' : 'snapshot',
+  refreshing:false,
+  saved:new Map((Array.isArray(oldSaved) ? oldSaved.filter(validRepo) : []).map(repo => [repoKey(repo),repo])),
+  trigger:null, refreshError:false,
+  search:{query:'',items:[],loading:false,error:''}
+};
+const titleOf = repo => repo.title || repo.name || repo.full_name.split('/')[1];
+const experienceOf = repo => {
+  const trial = safeUrl(repo.trial);
+  if (trial) return {url:trial,label:'在线体验'};
+  const download = safeUrl(repo.downloadUrl);
+  if (download) return {url:download,label:repo.downloadLabel || '下载体验'};
+  return null;
+};
+const detailReady = repo => Array.isArray(repo.authorSections) && repo.authorSections.some(item =>
+  item && ((item.paragraphs?.length || 0) + (item.bullets?.length || 0) > 0)) && experienceOf(repo);
+
+function getCatalog() {
+  const products = new Map();
+  for (const repo of snapshot) products.set(repoKey(repo),{...repo,observed_at:snapshotDate});
+  for (const repo of examples) products.set(repoKey(repo),repo);
+  for (const repo of state.catalog) {
+    const key = repoKey(repo);
+    if (guides[key]) products.set(key,{...products.get(key),...repo});
+  }
+  return [...products.values()].filter(repo=>guides[repoKey(repo)]).map(repo=>{
+    const meta = metadata.get(repoKey(repo));
+    return enrich({...repo,...meta?.repo,published_at:meta?.published_at || repo.published_at});
+  }).filter(detailReady);
+}
+async function request(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(()=>controller.abort(),8500);
+  try {
+    const response = await fetch(url,{headers:ACCEPT,signal:controller.signal});
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error('GitHub HTTP ' + response.status);
+    return await response.json();
+  } finally { clearTimeout(timeout); }
+}
+function shape(item) {
+  const {full_name,name,description,stargazers_count,topics,homepage,created_at,updated_at,html_url} = item;
+  return {full_name,name,description,stargazers_count,topics,homepage,created_at,updated_at,html_url,approximate:false};
+}
+function loadMeta(repo, force = false) {
+  const key = repoKey(repo);
+  if (inFlight.has(key)) return inFlight.get(key);
+  if (!force && metadata.get(key)?.checked === today()) return Promise.resolve();
+  const base = API + '/repos/' + repo.full_name;
+  const task = Promise.allSettled([
+    request(base + '/releases/latest'),
+    !force && repo.created_at && !repo.approximate ? Promise.resolve(null) : request(base)
+  ]).then(([release,project])=>{
+    const previous = metadata.get(key);
+    if (release.status === 'rejected' && project.status === 'rejected') return;
+    if (release.status === 'rejected' && !project.value) return;
+    metadata.set(key,{
+      checked:today(),
+      published_at:release.status === 'fulfilled' ? release.value?.published_at : previous?.published_at,
+      repo:validRepo(project.value) ? shape(project.value) : previous?.repo
+    });
+  }).finally(()=>inFlight.delete(key));
+  inFlight.set(key,task);
+  return task;
+}
+function updateStatus(message = '') {
+  const node = $('#status');
+  if (state.view === 'search') {
+    node.textContent = message || (state.search.loading ? '正在 GitHub 搜索…' : state.search.error || (state.search.items.length ? `找到 ${state.search.items.length} 个高星项目，按 Star 排序` : '换一种说法再试试'));
+    node.hidden = !node.textContent;
+    return;
+  }
+  node.textContent = message || (state.refreshError ? '暂时无法刷新，正在显示已有项目。' : state.source === 'live' ? '' :
+    state.source === 'cache' ? '数据更新于 ' + state.date : '精选于 ' + snapshotDate);
+  node.hidden = state.view === 'saved' || !node.textContent;
+}
+async function refresh(force = false) {
+  if (state.refreshing) return;
+  state.refreshing = true;
+  state.refreshError = false;
+  $('#refresh').disabled = true;
+  if (force) updateStatus('正在刷新推荐…');
+  try {
+    if (force || state.date !== today() || state.source === 'snapshot') {
+      const cutoff = dateKey(new Date(Date.now() - 30 * 86400000));
+      const query = new URLSearchParams({q:'is:public archived:false fork:false stars:>=' + MIN_STARS + ' created:>=' + cutoff,sort:'stars',order:'desc',per_page:'60'});
+      const data = await request(API + '/search/repositories?' + query);
+      if (!Array.isArray(data?.items)) throw new Error('No projects');
+      state.catalog = data.items.filter(item=>validRepo(item) && guides[repoKey(item)] && !item.archived && !item.fork).map(shape);
+      state.date = today(); state.source = 'live';
+      storage.put('recent',{date:state.date,repos:state.catalog});
+    }
+  } catch {
+    state.refreshError = force;
+  } finally {
+    const catalog = getCatalog();
+    const favorites = readFavorites(catalog);
+    const batch = [...new Map([...rank(catalog,favorites),...favorites].map(repo=>[repoKey(repo),repo])).values()].slice(0,22);
+    await Promise.all(batch.map(repo=>loadMeta(repo,force)));
+    storage.put('project-dates-v1',[...metadata]);
+    state.refreshing = false;
+    $('#refresh').disabled = false;
+    if (!$('#detail').open) render();
+  }
+}
+
+function readFavorites(catalog = getCatalog()) {
+  const byKey = new Map(catalog.map(repo=>[repoKey(repo),repo]));
+  return [...state.saved].reverse().map(([key,repo])=>byKey.get(key) || enrich(repo)).filter(detailReady);
+}
+function fillCover(node,repo) {
+  const img = node.querySelector('img');
+  const fallback = node.querySelector('.text-cover');
+  const line = fallback.querySelector('p');
+  const tone = [...repoKey(repo)].reduce((total,char)=>total + char.charCodeAt(0),0) % 6;
+  fallback.classList.add('cover-tone-' + tone);
+  line.textContent = repo.coverText || repo.summary || titleOf(repo);
+  if (!repo.cover) return;
+  img.onload = ()=>{ img.hidden = false; fallback.hidden = true; };
+  img.onerror = ()=>{ img.hidden = true; fallback.hidden = false; };
+  img.alt = '项目界面截图';
+  img.src = repo.cover;
+}
+const searchRules = [
+  [/播客/i,['audio']], [/podcast/i,['podcast']], [/翻译|译成|translation|translate/i,['translate']], [/字幕|subtitle/i,['subtitles']], [/转录|语音转文字|transcri/i,['transcribe']],
+  [/语音|音频|录音|voice|audio/i,['audio']], [/视频|剪辑|video/i,['video']], [/图片|照片|相册|image|photo/i,['image']],
+  [/截图|screenshot/i,['screenshot']], [/原型|低代码|无代码|prototype|low.?code|no.?code/i,['prototype']],
+  [/设计系统|组件库|design system/i,['design-system']],
+  [/工作流|自动化|workflow|automation/i,['workflow']], [/智能体|助手|agent/i,['ai-agent']], [/知识库|文档问答|rag/i,['rag']],
+  [/人工智能|\bai\b/i,['ai']],
+  [/学习|教学|老师|教育|tutor|education/i,['education','ai-tutor']], [/会议|笔记|meeting|notes/i,['meeting-notes']],
+  [/搜索|检索|search/i,['search']], [/爬虫|抓取|crawler|scraper/i,['web-scraping']], [/本地|离线|local|offline/i,['self-hosted']],
+  [/手机|安卓|android|mobile/i,['android']], [/苹果|ios|iphone/i,['ios']]
+];
+function naturalSearchQuery(input) {
+  const terms = [];
+  for (const [pattern,values] of searchRules) if (pattern.test(input)) terms.push(...values);
+  const english = input.toLowerCase().match(/[a-z][a-z0-9-]{2,}/g) || [];
+  const stop = new Set(['github','project','projects','want','find','show','with','that','this','open','source']);
+  terms.push(...english.filter(word=>!stop.has(word)));
+  if (!terms.length && /产品经理|product manager/i.test(input)) terms.push('productivity');
+  const unique = [...new Set(terms)].slice(0,4);
+  const phrase = unique.length ? unique.join(' ') : input.trim();
+  return `${phrase} in:name,description stars:>=${MIN_STARS} archived:false fork:false`;
+}
+function searchChineseCopy(item, query) {
+  const original = String(item.description || '');
+  if (/^[\s【（(]*[㐀-鿿]/.test(original)) return {title:original.replace(/[。.!！].*$/,'').slice(0,34),summary:original};
+  const text = original.toLowerCase();
+  const has = pattern => pattern.test(text);
+  const transcribe = has(/transcrib|speech[- ]to[- ]text|speech recognition/);
+  const translate = has(/translat|localization/);
+  const subtitle = has(/subtitle|caption/);
+  const dub = has(/\bdub|dubbing|localization/);
+  const tts = has(/text[- ]to[- ]speech|\btts\b/);
+  const clone = has(/voice clon/);
+  const download = has(/download/);
+  const summarize = has(/summari/);
+  const chat = has(/\bchat\b|question/);
+  const local = has(/offline|local(?:ly)?|self[- ]host|personal computer/);
+  const realtime = has(/real[- ]time|live caption/);
+  const whisper = has(/whisper/);
+  const languages = text.match(/(\d+)\+?\s*languages?/);
+  let title;
+  if (download && transcribe) title = '下载音视频，并在本地转写和翻译';
+  else if (dub) title = '给视频生成多语言配音';
+  else if (clone) title = '用网页界面做语音合成和声音克隆';
+  else if (transcribe && translate) title = '把音频转成文字并翻译';
+  else if (subtitle && translate) title = '自动翻译视频字幕';
+  else if (transcribe) title = '把音频或视频转成文字';
+  else if (tts) title = '把文字转换成语音';
+  else title = `与「${query.slice(0,16)}」相关的高星项目`;
+  const capabilities = [];
+  if (download) capabilities.push('下载音视频');
+  if (transcribe) capabilities.push('语音转文字');
+  if (translate) capabilities.push('翻译');
+  if (subtitle) capabilities.push('生成或处理字幕');
+  if (dub) capabilities.push('视频配音');
+  if (tts) capabilities.push('语音合成');
+  if (clone) capabilities.push('声音克隆');
+  if (summarize) capabilities.push('内容总结');
+  if (chat) capabilities.push('围绕音视频继续提问');
+  let summary = capabilities.length ? `可以${capabilities.slice(0,4).join('、')}` : `这是一个与「${query}」相关的开源项目`;
+  if (languages) summary += `，支持 ${languages[1]}+ 种语言`;
+  if (realtime) summary += '，支持实时处理';
+  if (local) summary += '，可以在自己的电脑上运行';
+  if (whisper) summary += '，使用 Whisper 识别语音';
+  return {title,summary:summary + '。'};
+}
+function searchResult(item, query) {
+  const shaped = shape(item);
+  const repo = enrich({...shaped,searchResult:true,url:safeUrl(item.html_url) || `https://github.com/${item.full_name}`});
+  const prepared = notes[repoKey(repo)];
+  const copy = prepared || searchChineseCopy(item,query);
+  return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:copy.summary,coverText:copy.summary};
+}
+async function searchGitHub(input) {
+  const query = input.trim();
+  if (!query || state.search.loading) return;
+  state.view = 'search';
+  state.search = {query,items:[],loading:true,error:''};
+  $('#project-search').value = query;
+  $('#search-clear').hidden = false;
+  $('#search-form .search-submit').disabled = true;
+  render();
+  try {
+    const params = new URLSearchParams({q:naturalSearchQuery(query),sort:'stars',order:'desc',per_page:'20'});
+    const data = await request(API + '/search/repositories?' + params);
+    if (!Array.isArray(data?.items)) throw new Error('No search results');
+    state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
+  } catch {
+    state.search.error = 'GitHub 暂时没有返回结果，请稍后再试';
+  } finally {
+    state.search.loading = false;
+    $('#search-form .search-submit').disabled = false;
+    render();
+    window.scrollTo(0,0);
+  }
+}
+function card(repo) {
+  const el = $('#card-template').content.firstElementChild.cloneNode(true);
+  el.querySelector('h2').textContent = titleOf(repo);
+  el.querySelector('.stars').textContent = '★ ' + (repo.approximate ? '约 ' : '') + compact.format(repo.stargazers_count);
+  const date = el.querySelector('.published');
+  const shownDate = repo.published_at || (repo.searchResult ? repo.updated_at : repo.created_at);
+  date.textContent = shownDate ? displayDate(shownDate) : '日期暂缺';
+  date.setAttribute('aria-label',dateLabel(repo));
+  date.title = dateLabel(repo);
+  fillCover(el.querySelector('.cover'),repo);
+  const trigger = el.querySelector('.project');
+  trigger.dataset.project = repoKey(repo);
+  if (repo.searchResult && !detailReady(repo)) {
+    trigger.setAttribute('aria-label',`${titleOf(repo)}，打开原 GitHub 仓库`);
+    trigger.addEventListener('click',()=>window.open(repo.url,'_blank','noopener,noreferrer'));
+  } else trigger.addEventListener('click',()=>openDetails(repo,trigger));
+  return el;
+}
+function external(url,text,style='secondary') {
+  const el = document.createElement('a');
+  el.href = url;
+  el.className = style;
+  el.target = '_blank';
+  el.rel = 'noopener noreferrer';
+  el.textContent = text + ' ↗';
+  return el;
+}
+function updateSave(button,repo) {
+  const saved = state.saved.has(repoKey(repo));
+  button.textContent = saved ? '已收藏' : '收藏';
+  button.setAttribute('aria-pressed',String(saved));
+}
+function paragraph(text,kind) {
+  const el = document.createElement('p');
+  el.textContent = text;
+  if (kind) el.className = kind;
+  return el;
+}
+function section(heading,content) {
+  const section = document.createElement('section');
+  const label = document.createElement('h3');
+  label.textContent = heading;
+  section.append(label);
+  if (Array.isArray(content)) {
+    const list = document.createElement('ul');
+    for (const item of content) {
+      const row = document.createElement('li');
+      row.textContent = item;
+      list.append(row);
+    }
+    section.append(list);
+  } else {
+    section.append(paragraph(content));
+  }
+  return section;
+}
+function openDetails(repo,trigger) {
+  if (!detailReady(repo)) return;
+  state.trigger = trigger;
+  const details = $('#details');
+  const header = document.createElement('h2');
+  header.id = 'detail-title';
+  header.textContent = titleOf(repo);
+  const meta = paragraph('★ ' + (repo.approximate ? '约 ' : '') + exact.format(repo.stargazers_count),'detail-meta');
+  details.replaceChildren(header,meta);
+  if (Array.isArray(repo.authorSections) && repo.authorSections.length) {
+    for (const item of repo.authorSections) {
+      const block = document.createElement('section');
+      if (item.heading) {
+        const label = document.createElement('h3');
+        label.textContent = item.heading;
+        block.append(label);
+      }
+      for (const text of item.paragraphs || []) block.append(paragraph(text));
+      if (item.bullets?.length) {
+        const list = document.createElement(item.ordered ? 'ol' : 'ul');
+        for (const text of item.bullets) {
+          const row = document.createElement('li');
+          row.textContent = text;
+          list.append(row);
+        }
+        block.append(list);
+      }
+      details.append(block);
+    }
+  }
+  if (repo.cover) {
+    const figure = document.createElement('figure');
+    figure.hidden = true;
+    const img = document.createElement('img');
+    const caption = document.createElement('figcaption');
+    caption.textContent = '项目实际界面';
+    img.alt = '项目界面截图';
+    img.onload = ()=>{ figure.hidden = false; };
+    img.src = repo.cover;
+    figure.append(img,caption);
+    details.append(figure);
+  }
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const experience = experienceOf(repo);
+  actions.append(external(repo.url,'查看 GitHub'));
+  actions.append(external(experience.url,experience.label,'primary'));
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'secondary save';
+  updateSave(save,repo);
+  save.addEventListener('click',()=>{
+    const key = repoKey(repo);
+    if (state.saved.has(key)) state.saved.delete(key); else state.saved.set(key,repo);
+    const persisted = storage.put('saved',[...state.saved.values()]);
+    updateSave(save,repo);
+    const notice = $('#save-status');
+    notice.textContent = persisted ? (state.saved.has(key) ? '已加入「' + (repo.theme || '其他项目') + '」' : '已取消收藏') : '设备未能保存到本地';
+    notice.hidden = false;
+  });
+  actions.append(save);
+  const notice = paragraph('','save-status');
+  notice.id = 'save-status';
+  notice.setAttribute('role','status');
+  notice.hidden = true;
+  details.append(actions,notice);
+  $('#detail').showModal();
+  $('#detail').scrollTop = 0;
+}
+const masonry = 'ResizeObserver' in window ? new ResizeObserver(entries=>{
+  for (const {target} of entries) {
+    const height = target.getBoundingClientRect().height;
+    if (height > 0) target.style.gridRowEnd = 'span ' + (Math.ceil(height) + 12);
+  }
+}) : null;
+function observeCards(feed) {
+  if (!masonry) return;
+  feed.classList.add('masonry');
+  for (const card of feed.children) masonry.observe(card);
+}
+function render() {
+  const savedView = state.view === 'saved';
+  const searchView = state.view === 'search';
+  const catalog = getCatalog();
+  const favorites = readFavorites(catalog);
+  const items = savedView ? favorites : searchView ? state.search.items : rank(catalog,favorites);
+  $('#heading').textContent = savedView ? '收藏' : searchView ? '搜索结果' : '推荐';
+  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? `“${state.search.query}”` : '值得 AI 产品经理逛一逛的开源项目';
+  $('#refresh').hidden = savedView || searchView;
+  $('#search-dock').hidden = savedView;
+  for (const tab of document.querySelectorAll('[data-view]')) {
+    if (tab.dataset.view === state.view || (searchView && tab.dataset.view === 'discover')) tab.setAttribute('aria-current','page'); else tab.removeAttribute('aria-current');
+  }
+  const feed = $('#feed'), groups = $('#groups');
+  feed.hidden = savedView;
+  groups.hidden = !savedView;
+  masonry?.disconnect();
+  feed.replaceChildren();
+  groups.replaceChildren();
+  if (savedView) {
+    for (const [theme,projects] of groupSaved(items)) {
+      const section = document.createElement('section');
+      const label = document.createElement('h2');
+      label.className = 'theme-name';
+      label.textContent = theme + ' · ' + projects.length;
+      const list = document.createElement('div');
+      list.className = 'feed';
+      list.append(...projects.map(card));
+      section.append(label,list);
+      groups.append(section);
+      observeCards(list);
+    }
+  } else {
+    feed.append(...items.map(card));
+    observeCards(feed);
+  }
+  const empty = $('#empty');
+  empty.hidden = items.length > 0;
+  empty.querySelector('h2').textContent = savedView ? '还没有收藏' : searchView ? '没有找到合适的项目' : '暂时没有新项目';
+  empty.querySelector('p').textContent = savedView ? '打开项目详情后，可以把想留着看的项目收进这里。' : searchView ? '换一个更具体的说法，例如“把播客转成中文字幕”。' : '晚点再回来发现新项目。';
+  empty.querySelector('button').hidden = !savedView;
+  updateStatus();
+}
+function go(view) {
+  state.view = view;
+  if (view === 'discover') {
+    state.search = {query:'',items:[],loading:false,error:''};
+    $('#project-search').value = '';
+    $('#search-clear').hidden = true;
+  }
+  render();
+  window.scrollTo(0,0);
+}
+for (const tab of document.querySelectorAll('[data-view]')) tab.addEventListener('click',()=>go(tab.dataset.view));
+$('#search-form').addEventListener('submit',event=>{ event.preventDefault(); searchGitHub($('#project-search').value); });
+$('#project-search').addEventListener('input',event=>{ $('#search-clear').hidden = !event.target.value; });
+$('#search-clear').addEventListener('click',()=>{ go('discover'); $('#project-search').focus(); });
+$('#empty button').addEventListener('click',()=>go('discover'));
+$('#refresh').addEventListener('click',()=>refresh(true));
+$('#detail .close').addEventListener('click',()=>$('#detail').close());
+$('#detail').addEventListener('close',()=>{
+  render();
+  const key = state.trigger?.dataset.project;
+  const restored = [...document.querySelectorAll('[data-project]')].find(node=>node.dataset.project === key);
+  restored?.focus({preventScroll:true});
+});
+document.addEventListener('visibilitychange',()=>{
+  if (!document.hidden && state.date !== today()) refresh();
+});
+if (location.protocol !== 'file:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+render();
+refresh();
+
+</script>
+</body>
+</html>
