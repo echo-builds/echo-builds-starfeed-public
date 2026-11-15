@@ -31,6 +31,9 @@ a{color:inherit;text-decoration:none}
 .account.connected{border-color:#c9dfc7;background:#f2f8f0;color:#35603b}
 main{max-width:1080px;margin:auto;padding:20px 12px calc(148px + env(safe-area-inset-bottom))}
 .heading{padding:0 3px 14px}
+.heading.discover-heading h1{display:none}
+.heading.discover-heading{padding-top:2px}
+.heading.discover-heading p{max-width:720px;font-size:13px;line-height:1.55}
 h1{font-size:31px;line-height:1.15;letter-spacing:-.03em;margin:0 0 5px}
 .heading p,.status{font-size:13px;color:var(--muted);margin:0}
 .status{margin:0 3px 11px;font-size:11px}
@@ -515,7 +518,9 @@ function discoveryResult(item) {
   const prepared = getCuratedCatalog().find(repo=>repoKey(repo) === repoKey(item));
   if (prepared) return {...prepared,...item,published_at:prepared.published_at,feedResult:true};
   const repo = enrich({...shape(item),searchResult:true,feedResult:true,url:safeUrl(item.html_url) || `https://github.com/${item.full_name}`});
-  const summary = repo.description || `${repo.full_name} 是一个拥有 ${compact.format(repo.stargazers_count)} Star 的开源项目。`;
+  const description = String(repo.description || '').trim();
+  const chineseDescription = /[㐀-鿿]/.test(description) ? description : '';
+  const summary = chineseDescription || `${repo.name} 是一个拥有 ${compact.format(repo.stargazers_count)} Star 的开源项目，点击可查看 GitHub 说明。`;
   return {...repo,title:repo.name,summary,coverText:summary};
 }
 function getDiscoverCatalog() {
@@ -572,12 +577,12 @@ function loadMeta(repo, force = false) {
 function updateStatus(message = '') {
   const node = $('#status');
   if (state.view === 'search') {
-    node.textContent = message || (state.search.loading ? '正在 GitHub 搜索…' : state.search.error || (state.search.items.length ? `找到 ${state.search.items.length} 个高星项目，按 Star 排序` : '换一种说法再试试'));
+    node.textContent = message || (state.search.loading ? '正在理解需求并搜索整个 GitHub…' : state.search.error || state.search.hint || (state.search.items.length ? `从整个 GitHub 找到 ${state.search.items.length} 个项目，按 Star 从高到低排序` : '换一种说法再试试'));
     node.hidden = !node.textContent;
     return;
   }
   node.textContent = message || (state.refreshError ? 'GitHub 暂时没有返回新内容，继续显示已有项目。' :
-    state.source === 'live' ? '按创建时间从新到旧 · 高星且有真实社区参与' :
+    state.source === 'live' ? '' :
     state.source === 'cache' ? '正在获取 GitHub 最新项目…' : '正在连接 GitHub…');
   node.hidden = state.view === 'saved' || !node.textContent;
 }
@@ -601,6 +606,7 @@ async function loadDiscover({reset = false} = {}) {
   const sentinel = $('#feed-sentinel');
   sentinel.textContent = reset ? '正在获取最新项目…' : '正在加载更早的高星项目…';
   const current = reset ? [] : state.catalog;
+  const currentKeys = new Set(current.map(repoKey));
   let cursor = state.discoveryCursor || initialDiscoveryCursor();
   let incoming = [];
   try {
@@ -634,7 +640,19 @@ async function loadDiscover({reset = false} = {}) {
     state.refreshError = true;
   } finally {
     state.loadingMore = false;
-    if (!$('#detail').open) render();
+    if (!$('#detail').open) {
+      const canAppend = !reset && state.view === 'discover' && !state.refreshError;
+      if (!canAppend) render();
+      else {
+        const additions = incoming.filter(repo=>!currentKeys.has(repoKey(repo))).map(repo=>card(discoveryResult(repo)));
+        const feed = $('#feed');
+        feed.append(...additions);
+        if (masonry) for (const item of additions) masonry.observe(item);
+        const sentinel = $('#feed-sentinel');
+        sentinel.textContent = state.discoveryDone ? '已经看到 GitHub 最早期的项目' : '继续下滑，发现更早的高星项目';
+        updateStatus();
+      }
+    }
   }
 }
 
@@ -725,25 +743,46 @@ function searchResult(item, query) {
   const shaped = shape(item);
   const repo = enrich({...shaped,searchResult:true,url:safeUrl(item.html_url) || `https://github.com/${item.full_name}`});
   const prepared = notes[repoKey(repo)];
-  const copy = prepared || searchChineseCopy(item,query);
+  const aiCopy = item.ai_title || item.ai_summary ? {title:item.ai_title,summary:item.ai_summary} : null;
+  const copy = prepared || aiCopy || searchChineseCopy(item,query);
   return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:copy.summary,coverText:copy.summary};
 }
 async function searchGitHub(input) {
   const query = input.trim();
   if (!query || state.search.loading) return;
   state.view = 'search';
-  state.search = {query,items:[],loading:true,error:''};
+  state.search = {query,items:[],loading:true,error:'',hint:''};
   $('#project-search').value = query;
   $('#search-clear').hidden = false;
   $('#search-form .search-submit').disabled = true;
   render();
   try {
-    const params = new URLSearchParams({q:naturalSearchQuery(query),sort:'stars',order:'desc',per_page:'20'});
-    const data = await request(API + '/search/repositories?' + params);
+    const controller = new AbortController();
+    const timeout = setTimeout(()=>controller.abort(),25000);
+    const response = await fetch('/api/search',{
+      method:'POST',
+      headers:{'Content-Type':'application/json',Accept:'application/json'},
+      body:JSON.stringify({query}),
+      signal:controller.signal
+    });
+    clearTimeout(timeout);
+    if (!response.ok) throw new Error('Search HTTP ' + response.status);
+    const data = await response.json();
     if (!Array.isArray(data?.items)) throw new Error('No search results');
     state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
+    state.search.hint = data.mode === 'ai'
+      ? `已理解为“${data.intent || query}”，从整个 GitHub 找到 ${state.search.items.length} 个项目，按 Star 从高到低排序`
+      : `已按关键词检索整个 GitHub，找到 ${state.search.items.length} 个项目，按 Star 从高到低排序`;
   } catch {
-    state.search.error = 'GitHub 暂时没有返回结果，请稍后再试';
+    try {
+      const params = new URLSearchParams({q:naturalSearchQuery(query),sort:'stars',order:'desc',per_page:'20'});
+      const data = await request(API + '/search/repositories?' + params);
+      if (!Array.isArray(data?.items)) throw new Error('No search results');
+      state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
+      state.search.hint = `智能理解暂不可用，已按关键词检索整个 GitHub；结果按 Star 从高到低排序`;
+    } catch {
+      state.search.error = 'GitHub 暂时没有返回结果，请稍后再试';
+    }
   } finally {
     state.search.loading = false;
     $('#search-form .search-submit').disabled = false;
@@ -932,8 +971,10 @@ function render() {
   const catalog = getCatalog();
   const favorites = readFavorites(catalog);
   const items = savedView ? favorites : searchView ? state.search.items : getDiscoverCatalog();
-  $('#heading').textContent = savedView ? '收藏' : searchView ? '搜索结果' : '推荐';
-  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? `“${state.search.query}”` : '持续发现 GitHub 上新近出现的高星项目';
+  const headingWrap = document.querySelector('.heading');
+  headingWrap.classList.toggle('discover-heading',!savedView && !searchView);
+  $('#heading').textContent = savedView ? '收藏' : searchView ? '搜索结果' : '';
+  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? `“${state.search.query}”` : '按创建时间从新到旧，持续发现高星且有真实社区参与的 GitHub 项目';
   $('#search-dock').hidden = savedView;
   for (const tab of document.querySelectorAll('[data-view]')) {
     if (tab.dataset.view === state.view || (searchView && tab.dataset.view === 'discover')) tab.setAttribute('aria-current','page'); else tab.removeAttribute('aria-current');
@@ -979,7 +1020,7 @@ function go(view) {
   if (view === 'saved') url.searchParams.set('view','saved'); else url.searchParams.delete('view');
   history.replaceState({},'',url);
   if (view === 'discover') {
-    state.search = {query:'',items:[],loading:false,error:''};
+    state.search = {query:'',items:[],loading:false,error:'',hint:''};
     $('#project-search').value = '';
     $('#search-clear').hidden = true;
   }
