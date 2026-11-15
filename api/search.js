@@ -2,7 +2,7 @@ const {getSession,refreshSession,setSession} = require('./_lib/session');
 
 const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
-const SEARCH_MODEL = process.env.SEARCH_MODEL || 'alibaba/qwen3.5-flash';
+const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning';
 
 function jsonFrom(text) {
   const source = String(text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
@@ -26,7 +26,6 @@ async function askModel(req,messages,maxTokens = 900) {
       model:SEARCH_MODEL,
       temperature:0.1,
       max_tokens:maxTokens,
-      response_format:{type:'json_object'},
       messages
     }),
     signal:AbortSignal.timeout(12000)
