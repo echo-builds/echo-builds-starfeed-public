@@ -1,6 +1,21 @@
-# 星集
+# Starfeed
 
-适合 AI 产品经理的 GitHub 项目推荐。手机双列浏览，点进详情后收藏，收藏页按中文主题自动归类。
+把值得看的 GitHub 项目变成可以浏览、搜索和收藏的信息流。
+
+手机上是双列发现流和底部导航；电脑上自动切换为顶部导航、顶部搜索和四列内容区。两端使用同一个网址、同一个 GitHub 账号和同一份 Stars。
+
+## 直接使用
+
+- 网页：<https://echo-builds-starfeed.vercel.app/>
+- 手机：用 Safari 或 Chrome 打开同一链接，也可以安装到主屏幕，像普通 App 一样启动。
+
+## 网页、手机和 PWA
+
+- 小屏幕使用双列卡片、底部搜索和底部导航。
+- 平板自动切换为三列；桌面切换为四列、顶部导航和顶部搜索。
+- `manifest.webmanifest`、应用图标和 Service Worker 让网站可以安装到手机或电脑，并在断网时打开最近缓存的页面。
+- 项目详情会生成带 `repo` 参数的独立网址，复制地址即可把具体项目分享给别人。
+- 收藏由 GitHub Stars 承载，换设备登录同一 GitHub 账号即可恢复。
 
 ## 本地预览
 
@@ -18,7 +33,7 @@ python3 -m http.server 4173
 - GitHub Token 不写入前端，也不保存在 `localStorage`；后端将访问令牌和刷新令牌加密后放入 `HttpOnly`、`Secure`、`SameSite=Lax` Cookie。
 - 登录后导入最多 1000 个历史 Stars，按仓库 Topics、名称和简介归入中文主题，并用于调整推荐顺序。
 - 登录前的本机收藏不会自动批量写入 GitHub；页面会让用户选择是否导入。
-- 在星集收藏或取消收藏会同步调用 GitHub Stars API。换设备后登录同一 GitHub 账号即可恢复收藏与兴趣画像。
+- 在 Starfeed 收藏或取消收藏会同步调用 GitHub Stars API。换设备后登录同一 GitHub 账号即可恢复收藏与兴趣画像。
 
 Vercel 需要配置以下环境变量：
 

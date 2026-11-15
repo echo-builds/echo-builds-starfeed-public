@@ -6,11 +6,13 @@
   <meta name="theme-color" content="#faf9f6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Starfeed">
   <meta name="description" content="发现近期高星 GitHub 项目，收藏你想继续看的产品。">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   
-  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAD+ElEQVR4nO3dQY7jRgxA0bnSLHP/I+ges88qSUOD6bQhk7KodknFB/y9C+SDAS1U+rH89VM63I/hJ9CtA0ilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUASvrn71/Dz3DlAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAIr6T8/a8JNcNoCiAEoDKAqgNICihgD686O3sAtQ1Pu3+KDn+owAinrn/p7RubghgJ725v2lgK5pCKCnvXN5e/QAdLMuCOiChgB6GkB7Ami7Ny8PoNkCaGcAbQfQzgDaaMj+7qhnAWizawIaPpbNANpo1BYBmqHh/wR3obMG0GPDAd0rgB4D6KUA+tJNn6UHBtCXAHo1gD7bqYeh/wfQZwAdCKDfvaSHoT8B9NEBPQytAfQRQIcD6LgehhaAFoBqdQdU1MNQa0Cn6GluqC+gE/V0NtQU0Ol62hoCCKBSHQF9k56ehtoB+lY9DQ31AvQGPd0MdQH0NjrdGLUANERPE0PzAxqop4OhyQEN1zO9oWkBDUfThNGEgIZDacVoNkDDfXQzNA+g4Sx6MpoB0HAKnRndGNDw3ZN0S0DDN03SLQEN3ytJ9wM0fIXXafgubgBo+JLu1fB9vQPQ8Clr7a6AaLujibsCQur6XG4GqDmm4TOfClAfScMnPDmgWSUNn2c7QHNIGj69YjMAWhtOoRudtXkArQ1n0YfO2myAlssbGj6fc5sQ0NpwKNPTWZsW0NpwNBPTWZsc0HIBQ8Mn8K3ND2jxZup31gLQ4t34b6sLoDV0Tq8XoMX9QGfXDtDihrJT6whocUfieQEEUKmmgBb3RJ9UX0CLm+rPqDWgxbcyynUHtPhaTy2AACoF0Ef0HA6gjwA6HEC/o+dYAH1Gz4EA+gygAwH0JXpeDaAvAfRqAD1Gz0sB9BhALwXQYwC9FEAb0bM/gDYCaH8AbQTQ/gDajp6dAbQdQDsDaDuAdgbQ0+jZE0BPA2hPAD0NoD0B9DSA9gRQFD1pAEUBlAZQFEBpAEUBlAZQFEBpAEUBlAZQEj1xACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKvUvfpkkviK0+s4AAAAASUVORK5CYII=">
-  <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAD+ElEQVR4nO3dQY7jRgxA0bnSLHP/I+ges88qSUOD6bQhk7KodknFB/y9C+SDAS1U+rH89VM63I/hJ9CtA0ilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUASvrn71/Dz3DlAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAIr6T8/a8JNcNoCiAEoDKAqgNICihgD686O3sAtQ1Pu3+KDn+owAinrn/p7RubghgJ725v2lgK5pCKCnvXN5e/QAdLMuCOiChgB6GkB7Ami7Ny8PoNkCaGcAbQfQzgDaaMj+7qhnAWizawIaPpbNANpo1BYBmqHh/wR3obMG0GPDAd0rgB4D6KUA+tJNn6UHBtCXAHo1gD7bqYeh/wfQZwAdCKDfvaSHoT8B9NEBPQytAfQRQIcD6LgehhaAFoBqdQdU1MNQa0Cn6GluqC+gE/V0NtQU0Ol62hoCCKBSHQF9k56ehtoB+lY9DQ31AvQGPd0MdQH0NjrdGLUANERPE0PzAxqop4OhyQEN1zO9oWkBDUfThNGEgIZDacVoNkDDfXQzNA+g4Sx6MpoB0HAKnRndGNDw3ZN0S0DDN03SLQEN3ytJ9wM0fIXXafgubgBo+JLu1fB9vQPQ8Clr7a6AaLujibsCQur6XG4GqDmm4TOfClAfScMnPDmgWSUNn2c7QHNIGj69YjMAWhtOoRudtXkArQ1n0YfO2myAlssbGj6fc5sQ0NpwKNPTWZsW0NpwNBPTWZsc0HIBQ8Mn8K3ND2jxZup31gLQ4t34b6sLoDV0Tq8XoMX9QGfXDtDihrJT6whocUfieQEEUKmmgBb3RJ9UX0CLm+rPqDWgxbcyynUHtPhaTy2AACoF0Ef0HA6gjwA6HEC/o+dYAH1Gz4EA+gygAwH0JXpeDaAvAfRqAD1Gz0sB9BhALwXQYwC9FEAb0bM/gDYCaH8AbQTQ/gDajp6dAbQdQDsDaDuAdgbQ0+jZE0BPA2hPAD0NoD0B9DSA9gRQFD1pAEUBlAZQFEBpAEUBlAZQFEBpAEUBlAZQEj1xACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKvUvfpkkviK0+s4AAAAASUVORK5CYII=">
-  <style>
+      <style>
 :root{color-scheme:light;--paper:#fbfaf7;--white:#fff;--ink:#1b1816;--muted:#655f59;--rule:#ebe5df;--red:#c8302c;font:16px/1.5 "PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Inter,system-ui,sans-serif}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink)}
@@ -106,20 +108,32 @@ dialog::backdrop{background:#18161280}
 .account-line{display:flex;align-items:center;gap:10px;margin:14px 0 6px;padding:12px;border-radius:12px;background:#f6f4f1}
 .account-line img{width:38px;height:38px;border-radius:50%}
 .account-line strong{display:block}
+.top-nav{display:none;align-items:center;gap:4px}
+.top-nav button,.install-app{border:0;background:transparent;border-radius:999px;padding:8px 13px;font-size:13px;font-weight:750;color:var(--muted)}
+.top-nav button[aria-current=page]{background:#f1ebe5;color:var(--ink)}
+.install-app{border:1px solid var(--rule);background:#fff;color:var(--ink)}
+.install-panel{padding:26px 24px 30px}
+.install-panel h2{margin:0 0 8px;font-size:25px}
+.install-panel p{margin:0 0 12px;color:var(--muted)}
 @media(min-width:620px){main{padding:25px 22px 154px}.search-dock{width:min(560px,calc(100% - 40px))}.feed{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card-copy{padding-inline:11px}.card-meta{padding-inline:11px}dialog{border-radius:17px;margin:auto;width:min(650px,calc(100vw - 60px));max-height:88vh;height:auto}#details{padding:25px 25px 28px}}
-@media(min-width:950px){.feed{grid-template-columns:repeat(4,minmax(0,1fr))}.text-cover{padding:16px}.card-copy h2{font-size:16px}}
+@media(min-width:950px){.header-inner{max-width:1180px;height:64px;padding-inline:24px}.top-nav{display:flex}.feed{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 15px}.text-cover{padding:16px}.card-copy h2{font-size:16px}.card{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.card:hover{transform:translateY(-3px);border-color:#ddd2c8;box-shadow:0 12px 30px #38281914}main{max-width:1180px;padding:34px 24px 80px}.heading{padding-bottom:20px}.heading h1{font-size:38px}.search-dock{top:9px;bottom:auto;width:min(390px,34vw);padding:0;z-index:4}.search-dock form{min-height:46px;box-shadow:none;background:#fff}.bottom{display:none}dialog{width:min(720px,calc(100vw - 80px));box-shadow:0 30px 90px #18161238}#details{padding:30px 32px 34px}}
 
 .feed.masonry{grid-auto-rows:1px;row-gap:0}
 
 </style>
-  <title>星集 · 发现 GitHub 项目</title>
+  <title>Starfeed · 发现 GitHub 项目</title>
   
 </head>
 <body>
   <header class="masthead">
     <div class="header-inner">
-      <a class="brand" href="./" aria-label="星集首页"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAD+ElEQVR4nO3dQY7jRgxA0bnSLHP/I+ges88qSUOD6bQhk7KodknFB/y9C+SDAS1U+rH89VM63I/hJ9CtA0ilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUASvrn71/Dz3DlAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAIr6T8/a8JNcNoCiAEoDKAqgNICihgD686O3sAtQ1Pu3+KDn+owAinrn/p7RubghgJ725v2lgK5pCKCnvXN5e/QAdLMuCOiChgB6GkB7Ami7Ny8PoNkCaGcAbQfQzgDaaMj+7qhnAWizawIaPpbNANpo1BYBmqHh/wR3obMG0GPDAd0rgB4D6KUA+tJNn6UHBtCXAHo1gD7bqYeh/wfQZwAdCKDfvaSHoT8B9NEBPQytAfQRQIcD6LgehhaAFoBqdQdU1MNQa0Cn6GluqC+gE/V0NtQU0Ol62hoCCKBSHQF9k56ehtoB+lY9DQ31AvQGPd0MdQH0NjrdGLUANERPE0PzAxqop4OhyQEN1zO9oWkBDUfThNGEgIZDacVoNkDDfXQzNA+g4Sx6MpoB0HAKnRndGNDw3ZN0S0DDN03SLQEN3ytJ9wM0fIXXafgubgBo+JLu1fB9vQPQ8Clr7a6AaLujibsCQur6XG4GqDmm4TOfClAfScMnPDmgWSUNn2c7QHNIGj69YjMAWhtOoRudtXkArQ1n0YfO2myAlssbGj6fc5sQ0NpwKNPTWZsW0NpwNBPTWZsc0HIBQ8Mn8K3ND2jxZup31gLQ4t34b6sLoDV0Tq8XoMX9QGfXDtDihrJT6whocUfieQEEUKmmgBb3RJ9UX0CLm+rPqDWgxbcyynUHtPhaTy2AACoF0Ef0HA6gjwA6HEC/o+dYAH1Gz4EA+gygAwH0JXpeDaAvAfRqAD1Gz0sB9BhALwXQYwC9FEAb0bM/gDYCaH8AbQTQ/gDajp6dAbQdQDsDaDuAdgbQ0+jZE0BPA2hPAD0NoD0B9DSA9gRQFD1pAEUBlAZQFEBpAEUBlAZQFEBpAEUBlAZQEj1xACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKvUvfpkkviK0+s4AAAAASUVORK5CYII=" alt=""><span>星集</span></a>
+      <a class="brand" href="./" aria-label="Starfeed 首页"><img src="/icons/icon-192.png" alt=""><span>Starfeed</span></a>
+      <nav class="top-nav" aria-label="桌面导航">
+        <button data-view="discover" type="button" aria-current="page">发现</button>
+        <button data-view="saved" type="button">收藏</button>
+      </nav>
       <div class="header-actions">
+        <button class="install-app" id="install-app" type="button" hidden>安装</button>
         <button class="account" id="account" type="button">登录 GitHub</button>
         <button class="refresh" id="refresh" type="button" aria-label="刷新推荐" title="刷新推荐">↻</button>
       </div>
@@ -158,7 +172,7 @@ dialog::backdrop{background:#18161280}
     <div class="auth-panel">
       <div id="auth-signed-out">
         <h2 id="auth-title">同步你的 GitHub 收藏</h2>
-        <p>登录后会导入你已经 Star 的项目。之后在星集里收藏或取消收藏，也会同步到 GitHub。</p>
+        <p>登录后会导入你已经 Star 的项目。之后在 Starfeed 里收藏或取消收藏，也会同步到 GitHub。</p>
         <button class="primary" id="auth-start" type="button">登录 GitHub</button>
         <p class="auth-note">只申请读取和修改 Stars。令牌由后端加密保存，网页无法读取。</p>
       </div>
@@ -173,6 +187,14 @@ dialog::backdrop{background:#18161280}
         <button class="primary" id="auth-sync" type="button">立即同步</button>
         <button class="secondary" id="auth-logout" type="button">退出同步</button>
       </div>
+    </div>
+  </dialog>
+  <dialog id="install-dialog" aria-labelledby="install-title">
+    <div class="dialog-top"><button class="close" type="button" aria-label="返回">‹</button><span>安装 Starfeed</span></div>
+    <div class="install-panel">
+      <h2 id="install-title">把 Starfeed 放到桌面</h2>
+      <p id="install-copy">安装后可以像普通 App 一样从桌面打开，手机和电脑仍使用同一账号与收藏。</p>
+      <button class="primary" id="install-confirm" type="button">安装 Starfeed</button>
     </div>
   </dialog>
   <template id="card-template">
@@ -445,12 +467,13 @@ const oldCatalog = Array.isArray(previous?.repos) ? previous.repos.filter(validR
 const oldSaved = storage.get('saved',[]);
 const metadata = new Map();
 const inFlight = new Map();
+const initialParams = new URLSearchParams(location.search);
 const previousMeta = storage.get('project-dates-v1',[]);
 if (Array.isArray(previousMeta)) for (const entry of previousMeta) {
   if (Array.isArray(entry) && typeof entry[0] === 'string' && entry[1]?.checked) metadata.set(...entry);
 }
 const state = {
-  view:'discover',
+  view:initialParams.get('view') === 'saved' ? 'saved' : 'discover',
   catalog:oldCatalog,
   date:oldCatalog.length ? previous.date : snapshotDate,
   source:oldCatalog.length ? 'cache' : 'snapshot',
@@ -459,7 +482,7 @@ const state = {
   auth:null,
   remoteSaved:new Map(),
   pendingLocal:[],
-  trigger:null, refreshError:false,
+  trigger:null, openRepo:null, refreshError:false,
   search:{query:'',items:[],loading:false,error:''}
 };
 const titleOf = repo => repo.title || repo.name || repo.full_name.split('/')[1];
@@ -731,9 +754,16 @@ function section(heading,content) {
   }
   return section;
 }
-function openDetails(repo,trigger) {
+function openDetails(repo,trigger,{pushRoute = true} = {}) {
   if (!detailReady(repo)) return;
+  if ($('#detail').open && state.openRepo === repoKey(repo)) return;
   state.trigger = trigger;
+  state.openRepo = repoKey(repo);
+  if (pushRoute) {
+    const url = new URL(location.href);
+    url.searchParams.set('repo',repo.full_name);
+    history.pushState({detail:repoKey(repo)},'',url);
+  }
   const details = $('#details');
   const header = document.createElement('h2');
   header.id = 'detail-title';
@@ -812,6 +842,26 @@ function openDetails(repo,trigger) {
   $('#detail').showModal();
   $('#detail').scrollTop = 0;
 }
+function openRouteDetail() {
+  const wanted = new URLSearchParams(location.search).get('repo');
+  if (!wanted) {
+    if ($('#detail').open) $('#detail').close();
+    return;
+  }
+  const key = wanted.toLowerCase();
+  const repos = [...getCatalog(),...state.saved.values(),...state.search.items];
+  const repo = repos.find(item=>repoKey(item) === key);
+  if (repo && detailReady(repo)) openDetails(repo,null,{pushRoute:false});
+}
+function closeDetailRoute() {
+  const url = new URL(location.href);
+  if (url.searchParams.has('repo')) {
+    if (history.state?.detail) return history.back();
+    url.searchParams.delete('repo');
+    history.replaceState({},'',url);
+  }
+  $('#detail').close();
+}
 const masonry = 'ResizeObserver' in window ? new ResizeObserver(entries=>{
   for (const {target} of entries) {
     const height = target.getBoundingClientRect().height;
@@ -868,6 +918,10 @@ function render() {
 }
 function go(view) {
   state.view = view;
+  const url = new URL(location.href);
+  url.searchParams.delete('repo');
+  if (view === 'saved') url.searchParams.set('view','saved'); else url.searchParams.delete('view');
+  history.replaceState({},'',url);
   if (view === 'discover') {
     state.search = {query:'',items:[],loading:false,error:''};
     $('#project-search').value = '';
@@ -940,7 +994,11 @@ async function bootstrapAuth() {
     state.auth = {user:data.user};
     renderAccount();
     await syncGitHubStars({preserveLocal:true});
-    if (new URLSearchParams(location.search).has('connected')) history.replaceState({},'',location.pathname);
+    if (new URLSearchParams(location.search).has('connected')) {
+      const url = new URL(location.href);
+      url.searchParams.delete('connected');
+      history.replaceState({},'',url);
+    }
   } catch {}
 }
 for (const tab of document.querySelectorAll('[data-view]')) tab.addEventListener('click',()=>go(tab.dataset.view));
@@ -949,7 +1007,8 @@ $('#project-search').addEventListener('input',event=>{ $('#search-clear').hidden
 $('#search-clear').addEventListener('click',()=>{ go('discover'); $('#project-search').focus(); });
 $('#empty button').addEventListener('click',()=>go('discover'));
 $('#refresh').addEventListener('click',()=>refresh(true));
-$('#detail .close').addEventListener('click',()=>$('#detail').close());
+$('#detail .close').addEventListener('click',closeDetailRoute);
+$('#detail').addEventListener('cancel',event=>{ event.preventDefault(); closeDetailRoute(); });
 $('#account').addEventListener('click',()=>{ renderAccount(); $('#auth-dialog').showModal(); });
 $('#auth-dialog .close').addEventListener('click',()=>$('#auth-dialog').close());
 $('#auth-start').addEventListener('click',startGitHubLogin);
@@ -982,16 +1041,49 @@ $('#auth-logout').addEventListener('click',async()=>{
 });
 renderAccount();
 $('#detail').addEventListener('close',()=>{
+  state.openRepo = null;
   render();
   const key = state.trigger?.dataset.project;
   const restored = [...document.querySelectorAll('[data-project]')].find(node=>node.dataset.project === key);
   restored?.focus({preventScroll:true});
 });
+window.addEventListener('popstate',openRouteDetail);
 document.addEventListener('visibilitychange',()=>{
   if (!document.hidden && state.date !== today()) refresh();
 });
-if (location.protocol !== 'file:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+let installPrompt = null;
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+function updateInstallButton() {
+  $('#install-app').hidden = standalone || (!installPrompt && !isIOS);
+}
+window.addEventListener('beforeinstallprompt',event=>{
+  event.preventDefault();
+  installPrompt = event;
+  updateInstallButton();
+});
+window.addEventListener('appinstalled',()=>{ installPrompt = null; $('#install-app').hidden = true; });
+$('#install-app').addEventListener('click',async()=>{
+  if (installPrompt) {
+    await installPrompt.prompt();
+    await installPrompt.userChoice.catch(()=>null);
+    installPrompt = null;
+    updateInstallButton();
+    return;
+  }
+  $('#install-copy').textContent = '在 Safari 底部点“分享”，再选择“添加到主屏幕”。之后可以像普通 App 一样从桌面打开。';
+  $('#install-confirm').hidden = true;
+  $('#install-dialog').showModal();
+});
+$('#install-dialog .close').addEventListener('click',()=>$('#install-dialog').close());
+$('#install-confirm').addEventListener('click',()=>$('#install-app').click());
+updateInstallButton();
+if (location.protocol !== 'file:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
+document.querySelector('.brand span').textContent = 'Starfeed';
+document.querySelector('.brand').setAttribute('aria-label','Starfeed 首页');
+document.querySelector('.brand img').src = '/icons/icon-192.png';
 render();
+openRouteDetail();
 refresh();
 bootstrapAuth();
 
