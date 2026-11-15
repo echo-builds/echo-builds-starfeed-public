@@ -2,15 +2,37 @@
 
 适合 AI 产品经理的 GitHub 项目推荐。手机双列浏览，点进详情后收藏，收藏页按中文主题自动归类。
 
-## 运行
+## 本地预览
 
-Mac 直接用 Safari 或 Chrome 打开 `starfeed.html`。要测试手机网页，可在源码目录运行：
+只预览推荐与搜索页面时，可在源码目录运行：
 
 ```sh
-python3 -m http.server 4173 --directory dist
+python3 -m http.server 4173
 ```
 
-打开 <http://localhost:4173>。用支持 HTTPS 的静态托管服务发布 `dist/` 后，iPhone 可以在 Safari 的分享菜单里选「添加到主屏幕」。
+打开 <http://localhost:4173>。GitHub 登录和 Stars 同步依赖 Vercel Functions，本地静态服务器不会运行 `/api`。
+
+## GitHub 登录与收藏同步
+
+- 用户通过 GitHub App 登录，应用只申请 Stars 读取和写入权限。
+- GitHub Token 不写入前端，也不保存在 `localStorage`；后端将访问令牌和刷新令牌加密后放入 `HttpOnly`、`Secure`、`SameSite=Lax` Cookie。
+- 登录后导入最多 1000 个历史 Stars，按仓库 Topics、名称和简介归入中文主题，并用于调整推荐顺序。
+- 登录前的本机收藏不会自动批量写入 GitHub；页面会让用户选择是否导入。
+- 在星集收藏或取消收藏会同步调用 GitHub Stars API。换设备后登录同一 GitHub 账号即可恢复收藏与兴趣画像。
+
+Vercel 需要配置以下环境变量：
+
+```text
+GITHUB_CLIENT_ID
+GITHUB_CLIENT_SECRET
+SESSION_SECRET
+```
+
+`SESSION_SECRET` 至少 32 个随机字符。GitHub App 的回调地址设置为：
+
+```text
+https://<Vercel 域名>/api/auth/callback
+```
 
 ## 推荐和日期
 
@@ -18,7 +40,7 @@ python3 -m http.server 4173 --directory dist
 - 日期优先用 GitHub 最新正式版本的发布时间，无版本时用仓库创建日期。取不到日期时留空的含义通过「日期暂缺」提示，不估算发布日期。
 - 首页可显示真实产品画面，也可使用统一文字封面。详情页不增加说明条或编辑自拟栏目：项目提供官方中文 README 时，按 README 原有标题、段落和列表原文展示；仅有英文 README 时，逐段翻译并保留原有结构。
 - README 详情未完成获取和核对的项目不进入推荐流，不向用户展示占位详情页。
-- 详情页底部只保留三个操作：查看 GitHub、在线体验或客户端下载安装、收藏。发现页打开后从 GitHub 获取 Star 和版本时间，无法连接时继续使用预载数据。新增的一手中文介绍写在 `dist/editorial.mjs`。收藏仅保存在当前浏览器。
+- 详情页底部只保留三个操作：查看 GitHub、在线体验或客户端下载安装、收藏。发现页打开后从 GitHub 获取 Star 和版本时间，无法连接时继续使用预载数据。登录前收藏保存在当前浏览器；登录后与 GitHub Stars 双向同步。
 
 ## 自然语言搜索
 
