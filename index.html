@@ -464,7 +464,7 @@ function enrich(repo) {
     url:'https://github.com/' + repo.full_name};
 }
 const previous = storage.get('recent',null);
-const oldCatalog = Array.isArray(previous?.repos) ? previous.repos.filter(validRepo) : [];
+const oldCatalog = Array.isArray(previous?.repos) ? previous.repos.filter(repo=>validRepo(repo) && (guides[repoKey(repo)] || Number(repo.forks_count) >= 10)) : [];
 const oldSaved = storage.get('saved',[]);
 const metadata = new Map();
 const inFlight = new Map();
@@ -536,8 +536,13 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,topics,homepage,created_at,updated_at,html_url} = item;
-  return {full_name,name,description,stargazers_count,topics,homepage,created_at,updated_at,html_url,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,approximate:false};
+}
+function credibleRepo(item) {
+  const text = `${item.name || ''} ${item.description || ''}`;
+  const suspicious = /pre[- ]?activated|full working installer|complete standalone|standalone desktop setup|trainer tool|skin swapper|password recovery|unlocker|keygen|serial key|all features (?:enabled|preconfigured)|ready to run in 2026/i;
+  return validRepo(item) && !item.archived && !item.fork && Number(item.forks_count) >= 10 && !suspicious.test(text);
 }
 function loadMeta(repo, force = false) {
   const key = repoKey(repo);
@@ -568,7 +573,7 @@ function updateStatus(message = '') {
     return;
   }
   node.textContent = message || (state.refreshError ? 'GitHub 暂时没有返回新内容，继续显示已有项目。' :
-    state.source === 'live' ? '按创建时间从新到旧 · 均为 500+ Star' :
+    state.source === 'live' ? '按创建时间从新到旧 · 高星且有真实社区参与' :
     state.source === 'cache' ? '正在获取 GitHub 最新项目…' : '正在连接 GitHub…');
   node.hidden = state.view === 'saved' || !node.textContent;
 }
@@ -598,12 +603,12 @@ async function loadDiscover({reset = false} = {}) {
     for (let attempt = 0; attempt < 3 && incoming.length === 0; attempt++) {
       const window = previousWindow(cursor);
       const query = new URLSearchParams({
-        q:`is:public archived:false fork:false stars:>=${MIN_STARS} created:${window.from}..${window.to}`,
+        q:`is:public archived:false fork:false stars:>=${MIN_STARS} forks:>=10 created:${window.from}..${window.to}`,
         sort:'stars',order:'desc',per_page:'100'
       });
       const data = await request(API + '/search/repositories?' + query);
       if (!Array.isArray(data?.items)) throw new Error('No projects');
-      incoming = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(shape)
+      incoming = data.items.filter(credibleRepo).map(shape)
         .sort((a,b)=>Date.parse(b.created_at) - Date.parse(a.created_at) || b.stargazers_count - a.stargazers_count);
       cursor = window.next;
     }
