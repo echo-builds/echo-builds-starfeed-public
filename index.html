@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#faf9f6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Starfeed">
+  <meta name="apple-mobile-web-app-title" content="RepoScroll">
   <meta name="description" content="发现近期高星 GitHub 项目，收藏你想继续看的产品。">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
@@ -121,13 +121,13 @@ dialog::backdrop{background:#18161280}
 .feed.masonry{grid-auto-rows:1px;row-gap:0}
 
 </style>
-  <title>Starfeed · 发现 GitHub 项目</title>
+  <title>RepoScroll · 发现 GitHub 项目</title>
   
 </head>
 <body>
   <header class="masthead">
     <div class="header-inner">
-      <a class="brand" href="./" aria-label="Starfeed 首页"><img src="/icons/icon-192.png" alt=""><span>Starfeed</span></a>
+      <a class="brand" href="./" aria-label="RepoScroll 首页"><img src="/icons/icon-192.png" alt=""><span>RepoScroll</span></a>
       <nav class="top-nav" aria-label="桌面导航">
         <button data-view="discover" type="button" aria-current="page">发现</button>
         <button data-view="saved" type="button">收藏</button>
@@ -172,7 +172,7 @@ dialog::backdrop{background:#18161280}
     <div class="auth-panel">
       <div id="auth-signed-out">
         <h2 id="auth-title">同步你的 GitHub 收藏</h2>
-        <p>登录后会导入你已经 Star 的项目。之后在 Starfeed 里收藏或取消收藏，也会同步到 GitHub。</p>
+        <p>登录后会导入你已经 Star 的项目。之后在 RepoScroll 里收藏或取消收藏，也会同步到 GitHub。</p>
         <button class="primary" id="auth-start" type="button">登录 GitHub</button>
         <p class="auth-note">只申请读取和修改 Stars。令牌由后端加密保存，网页无法读取。</p>
       </div>
@@ -190,11 +190,11 @@ dialog::backdrop{background:#18161280}
     </div>
   </dialog>
   <dialog id="install-dialog" aria-labelledby="install-title">
-    <div class="dialog-top"><button class="close" type="button" aria-label="返回">‹</button><span>安装 Starfeed</span></div>
+    <div class="dialog-top"><button class="close" type="button" aria-label="返回">‹</button><span>安装 RepoScroll</span></div>
     <div class="install-panel">
-      <h2 id="install-title">把 Starfeed 放到桌面</h2>
+      <h2 id="install-title">把 RepoScroll 放到桌面</h2>
       <p id="install-copy">安装后可以像普通 App 一样从桌面打开，手机和电脑仍使用同一账号与收藏。</p>
-      <button class="primary" id="install-confirm" type="button">安装 Starfeed</button>
+      <button class="primary" id="install-confirm" type="button">安装 RepoScroll</button>
     </div>
   </dialog>
   <template id="card-template">
@@ -1138,8 +1138,8 @@ $('#install-dialog .close').addEventListener('click',()=>$('#install-dialog').cl
 $('#install-confirm').addEventListener('click',()=>$('#install-app').click());
 updateInstallButton();
 if (location.protocol !== 'file:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
-document.querySelector('.brand span').textContent = 'Starfeed';
-document.querySelector('.brand').setAttribute('aria-label','Starfeed 首页');
+document.querySelector('.brand span').textContent = 'RepoScroll';
+document.querySelector('.brand').setAttribute('aria-label','RepoScroll 首页');
 document.querySelector('.brand img').src = '/icons/icon-192.png';
 render();
 openRouteDetail();

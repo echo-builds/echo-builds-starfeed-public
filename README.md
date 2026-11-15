@@ -1,4 +1,4 @@
-# Starfeed
+# RepoScroll
 
 把值得看的 GitHub 项目变成可以浏览、搜索和收藏的信息流。
 
@@ -33,7 +33,7 @@ python3 -m http.server 4173
 - GitHub Token 不写入前端，也不保存在 `localStorage`；后端将访问令牌和刷新令牌加密后放入 `HttpOnly`、`Secure`、`SameSite=Lax` Cookie。
 - 登录后导入最多 1000 个历史 Stars，按仓库 Topics、名称和简介归入中文主题，并用于调整推荐顺序。
 - 登录前的本机收藏不会自动批量写入 GitHub；页面会让用户选择是否导入。
-- 在 Starfeed 收藏或取消收藏会同步调用 GitHub Stars API。换设备后登录同一 GitHub 账号即可恢复收藏与兴趣画像。
+- 在 RepoScroll 收藏或取消收藏会同步调用 GitHub Stars API。换设备后登录同一 GitHub 账号即可恢复收藏与兴趣画像。
 
 Vercel 需要配置以下环境变量：
 

@@ -1,6 +1,6 @@
 {
-  "name": "Starfeed",
-  "short_name": "Starfeed",
+  "name": "RepoScroll",
+  "short_name": "RepoScroll",
   "description": "把值得看的 GitHub 项目变成可以浏览、搜索和收藏的信息流。",
   "start_url": "/",
   "scope": "/",
