@@ -24,6 +24,9 @@ a{color:inherit;text-decoration:none}
 .brand{font-weight:800;display:flex;align-items:center;gap:8px;font-size:18px}
 .brand img{width:28px;height:28px;border-radius:8px}
 .refresh,.close{display:grid;place-items:center;border:0;background:transparent;width:44px;height:44px;border-radius:50%;flex-shrink:0;line-height:1;font-size:23px}
+.header-actions{display:flex;align-items:center;gap:2px}
+.account{border:1px solid var(--rule);background:#fff;border-radius:18px;padding:6px 11px;font-size:12px;font-weight:700;max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account.connected{border-color:#c9dfc7;background:#f2f8f0;color:#35603b}
 .refresh:disabled{opacity:.5;cursor:progress}
 main{max-width:1080px;margin:auto;padding:20px 12px calc(148px + env(safe-area-inset-bottom))}
 .heading{padding:0 3px 14px}
@@ -94,6 +97,15 @@ dialog::backdrop{background:#18161280}
 .actions{display:grid;grid-template-columns:1fr 1.08fr .72fr;gap:8px;padding-top:12px;border-top:1px solid var(--rule)}
 .actions>*{min-width:0;padding-inline:7px;text-align:center}
 .save-status{font-size:12px;color:var(--muted)}
+.auth-panel{padding:22px 20px 28px}
+.auth-panel h2{font-size:24px;line-height:1.25;margin:0 0 9px}
+.auth-panel p{color:var(--muted);font-size:14px;margin:0 0 15px}
+.auth-panel .primary,.auth-panel .secondary{width:100%;min-height:46px;margin-top:8px}
+.device-code{display:block;margin:14px 0 7px;padding:14px;border:1px dashed #c9beb4;border-radius:12px;background:#f7f3ee;text-align:center;font:800 25px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}
+.auth-note{font-size:12px!important}
+.account-line{display:flex;align-items:center;gap:10px;margin:14px 0 6px;padding:12px;border-radius:12px;background:#f6f4f1}
+.account-line img{width:38px;height:38px;border-radius:50%}
+.account-line strong{display:block}
 @media(min-width:620px){main{padding:25px 22px 154px}.search-dock{width:min(560px,calc(100% - 40px))}.feed{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card-copy{padding-inline:11px}.card-meta{padding-inline:11px}dialog{border-radius:17px;margin:auto;width:min(650px,calc(100vw - 60px));max-height:88vh;height:auto}#details{padding:25px 25px 28px}}
 @media(min-width:950px){.feed{grid-template-columns:repeat(4,minmax(0,1fr))}.text-cover{padding:16px}.card-copy h2{font-size:16px}}
 
@@ -106,8 +118,11 @@ dialog::backdrop{background:#18161280}
 <body>
   <header class="masthead">
     <div class="header-inner">
-      <a class="brand" href="./index.html" aria-label="星集首页"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAD+ElEQVR4nO3dQY7jRgxA0bnSLHP/I+ges88qSUOD6bQhk7KodknFB/y9C+SDAS1U+rH89VM63I/hJ9CtA0ilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUASvrn71/Dz3DlAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAIr6T8/a8JNcNoCiAEoDKAqgNICihgD686O3sAtQ1Pu3+KDn+owAinrn/p7RubghgJ725v2lgK5pCKCnvXN5e/QAdLMuCOiChgB6GkB7Ami7Ny8PoNkCaGcAbQfQzgDaaMj+7qhnAWizawIaPpbNANpo1BYBmqHh/wR3obMG0GPDAd0rgB4D6KUA+tJNn6UHBtCXAHo1gD7bqYeh/wfQZwAdCKDfvaSHoT8B9NEBPQytAfQRQIcD6LgehhaAFoBqdQdU1MNQa0Cn6GluqC+gE/V0NtQU0Ol62hoCCKBSHQF9k56ehtoB+lY9DQ31AvQGPd0MdQH0NjrdGLUANERPE0PzAxqop4OhyQEN1zO9oWkBDUfThNGEgIZDacVoNkDDfXQzNA+g4Sx6MpoB0HAKnRndGNDw3ZN0S0DDN03SLQEN3ytJ9wM0fIXXafgubgBo+JLu1fB9vQPQ8Clr7a6AaLujibsCQur6XG4GqDmm4TOfClAfScMnPDmgWSUNn2c7QHNIGj69YjMAWhtOoRudtXkArQ1n0YfO2myAlssbGj6fc5sQ0NpwKNPTWZsW0NpwNBPTWZsc0HIBQ8Mn8K3ND2jxZup31gLQ4t34b6sLoDV0Tq8XoMX9QGfXDtDihrJT6whocUfieQEEUKmmgBb3RJ9UX0CLm+rPqDWgxbcyynUHtPhaTy2AACoF0Ef0HA6gjwA6HEC/o+dYAH1Gz4EA+gygAwH0JXpeDaAvAfRqAD1Gz0sB9BhALwXQYwC9FEAb0bM/gDYCaH8AbQTQ/gDajp6dAbQdQDsDaDuAdgbQ0+jZE0BPA2hPAD0NoD0B9DSA9gRQFD1pAEUBlAZQFEBpAEUBlAZQFEBpAEUBlAZQEj1xACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKvUvfpkkviK0+s4AAAAASUVORK5CYII=" alt=""><span>星集</span></a>
-      <button class="refresh" id="refresh" type="button" aria-label="刷新推荐" title="刷新推荐">↻</button>
+      <a class="brand" href="./" aria-label="星集首页"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAD+ElEQVR4nO3dQY7jRgxA0bnSLHP/I+ges88qSUOD6bQhk7KodknFB/y9C+SDAS1U+rH89VM63I/hJ9CtA0ilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUAUimAVAoglQJIpQBSKYBUCiCVAkilAFIpgFQKIJUCSKUASvrn71/Dz3DlAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAEoCKA6gJIDiAIr6T8/a8JNcNoCiAEoDKAqgNICihgD686O3sAtQ1Pu3+KDn+owAinrn/p7RubghgJ725v2lgK5pCKCnvXN5e/QAdLMuCOiChgB6GkB7Ami7Ny8PoNkCaGcAbQfQzgDaaMj+7qhnAWizawIaPpbNANpo1BYBmqHh/wR3obMG0GPDAd0rgB4D6KUA+tJNn6UHBtCXAHo1gD7bqYeh/wfQZwAdCKDfvaSHoT8B9NEBPQytAfQRQIcD6LgehhaAFoBqdQdU1MNQa0Cn6GluqC+gE/V0NtQU0Ol62hoCCKBSHQF9k56ehtoB+lY9DQ31AvQGPd0MdQH0NjrdGLUANERPE0PzAxqop4OhyQEN1zO9oWkBDUfThNGEgIZDacVoNkDDfXQzNA+g4Sx6MpoB0HAKnRndGNDw3ZN0S0DDN03SLQEN3ytJ9wM0fIXXafgubgBo+JLu1fB9vQPQ8Clr7a6AaLujibsCQur6XG4GqDmm4TOfClAfScMnPDmgWSUNn2c7QHNIGj69YjMAWhtOoRudtXkArQ1n0YfO2myAlssbGj6fc5sQ0NpwKNPTWZsW0NpwNBPTWZsc0HIBQ8Mn8K3ND2jxZup31gLQ4t34b6sLoDV0Tq8XoMX9QGfXDtDihrJT6whocUfieQEEUKmmgBb3RJ9UX0CLm+rPqDWgxbcyynUHtPhaTy2AACoF0Ef0HA6gjwA6HEC/o+dYAH1Gz4EA+gygAwH0JXpeDaAvAfRqAD1Gz0sB9BhALwXQYwC9FEAb0bM/gDYCaH8AbQTQ/gDajp6dAbQdQDsDaDuAdgbQ0+jZE0BPA2hPAD0NoD0B9DSA9gRQFD1pAEUBlAZQFEBpAEUBlAZQFEBpAEUBlAZQEj1xACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxACUBFAdQEkBxAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKgWQSgGkUgCpFEAqBZBKAaRSAKkUQCoFkEoBpFIAqRRAKvUvfpkkviK0+s4AAAAASUVORK5CYII=" alt=""><span>星集</span></a>
+      <div class="header-actions">
+        <button class="account" id="account" type="button">登录 GitHub</button>
+        <button class="refresh" id="refresh" type="button" aria-label="刷新推荐" title="刷新推荐">↻</button>
+      </div>
     </div>
   </header>
   <main>
@@ -137,6 +152,28 @@ dialog::backdrop{background:#18161280}
   <dialog id="detail" aria-labelledby="detail-title">
     <div class="dialog-top"><button class="close" type="button" aria-label="返回">‹</button><span>项目详情</span></div>
     <div id="details"></div>
+  </dialog>
+  <dialog id="auth-dialog" aria-labelledby="auth-title">
+    <div class="dialog-top"><button class="close" type="button" aria-label="返回">‹</button><span>GitHub 同步</span></div>
+    <div class="auth-panel">
+      <div id="auth-signed-out">
+        <h2 id="auth-title">同步你的 GitHub 收藏</h2>
+        <p>登录后会导入你已经 Star 的项目。之后在星集里收藏或取消收藏，也会同步到 GitHub。</p>
+        <button class="primary" id="auth-start" type="button">登录 GitHub</button>
+        <p class="auth-note">只申请读取和修改 Stars。令牌由后端加密保存，网页无法读取。</p>
+      </div>
+      <div id="auth-signed-in" hidden>
+        <h2>已连接 GitHub</h2>
+        <div class="account-line"><img id="auth-avatar" alt=""><div><strong id="auth-login"></strong><span>Stars 已同步</span></div></div>
+        <div id="local-import" hidden>
+          <p><strong id="local-import-count"></strong> 个本机收藏还没有同步到 GitHub。</p>
+          <button class="primary" id="local-import-yes" type="button">同步到 GitHub</button>
+          <button class="secondary" id="local-import-no" type="button">不导入</button>
+        </div>
+        <button class="primary" id="auth-sync" type="button">立即同步</button>
+        <button class="secondary" id="auth-logout" type="button">退出同步</button>
+      </div>
+    </div>
   </dialog>
   <template id="card-template">
     <article class="card">
@@ -382,12 +419,25 @@ const storage = {
   }
 };
 const validRepo = repo => repo && typeof repo.full_name === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo.full_name);
+function inferTheme(repo) {
+  const text = [repo.name,repo.full_name,repo.description,...(repo.topics || [])].filter(Boolean).join(' ').toLowerCase();
+  const matches = (pattern) => pattern.test(text);
+  if (matches(/education|learning|tutor|teacher|student|flashcard|course|quiz/)) return 'AI 学习';
+  if (matches(/agent|assistant|copilot|llm|rag|prompt|mcp/)) return '智能体与 AI';
+  if (matches(/prototype|wireframe|design-system|figma|whiteboard|diagram|draw|ui|ux/)) return '产品设计与原型';
+  if (matches(/audio|video|podcast|speech|voice|subtitle|transcri|whisper|media/)) return '音视频';
+  if (matches(/workflow|automation|productivity|note|meeting|calendar|task/)) return '效率与自动化';
+  if (matches(/search|database|analytics|data|crawler|scraper|knowledge/)) return '搜索与数据';
+  if (matches(/developer|coding|code|editor|terminal|cli|debug|sdk|api/)) return '编程工具';
+  return '其他项目';
+}
 function enrich(repo) {
   const key = repoKey(repo);
   const note = notes[key] || {};
   const [theme,forPM,what,why,tryIt] = guides[key] || [];
   const topics = Array.isArray(repo.topics) ? repo.topics : [];
-  return {...repo,...note,published_at:repo.published_at || note.published_at,theme,forPM,what,why,tryIt,topics:[...new Set([...topics,...(note.topics || [])])],
+  const merged = {...repo,...note,topics:[...new Set([...topics,...(note.topics || [])])]};
+  return {...merged,published_at:repo.published_at || note.published_at,theme:theme || inferTheme(merged),forPM,what,why,tryIt,
     url:'https://github.com/' + repo.full_name};
 }
 const previous = storage.get('recent',null);
@@ -406,6 +456,9 @@ const state = {
   source:oldCatalog.length ? 'cache' : 'snapshot',
   refreshing:false,
   saved:new Map((Array.isArray(oldSaved) ? oldSaved.filter(validRepo) : []).map(repo => [repoKey(repo),repo])),
+  auth:null,
+  remoteSaved:new Map(),
+  pendingLocal:[],
   trigger:null, refreshError:false,
   search:{query:'',items:[],loading:false,error:''}
 };
@@ -433,11 +486,11 @@ function getCatalog() {
     return enrich({...repo,...meta?.repo,published_at:meta?.published_at || repo.published_at});
   }).filter(detailReady);
 }
-async function request(url) {
+async function request(url,options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(()=>controller.abort(),8500);
   try {
-    const response = await fetch(url,{headers:ACCEPT,signal:controller.signal});
+    const response = await fetch(url,{...options,headers:{...ACCEPT,...(options.headers || {})},signal:controller.signal});
     if (response.status === 404) return null;
     if (!response.ok) throw new Error('GitHub HTTP ' + response.status);
     return await response.json();
@@ -511,7 +564,7 @@ async function refresh(force = false) {
 
 function readFavorites(catalog = getCatalog()) {
   const byKey = new Map(catalog.map(repo=>[repoKey(repo),repo]));
-  return [...state.saved].reverse().map(([key,repo])=>byKey.get(key) || enrich(repo)).filter(detailReady);
+  return [...state.saved].reverse().map(([key,repo])=>byKey.get(key) || enrich({...repo,searchResult:true}));
 }
 function fillCover(node,repo) {
   const img = node.querySelector('img');
@@ -729,14 +782,26 @@ function openDetails(repo,trigger) {
   save.type = 'button';
   save.className = 'secondary save';
   updateSave(save,repo);
-  save.addEventListener('click',()=>{
+  save.addEventListener('click',async()=>{
     const key = repoKey(repo);
-    if (state.saved.has(key)) state.saved.delete(key); else state.saved.set(key,repo);
+    const wasSaved = state.saved.has(key);
+    if (wasSaved) state.saved.delete(key); else state.saved.set(key,repo);
     const persisted = storage.put('saved',[...state.saved.values()]);
     updateSave(save,repo);
     const notice = $('#save-status');
-    notice.textContent = persisted ? (state.saved.has(key) ? '已加入「' + (repo.theme || '其他项目') + '」' : '已取消收藏') : '设备未能保存到本地';
+    notice.textContent = persisted ? (state.auth ? '正在同步 GitHub…' : (state.saved.has(key) ? '已加入「' + (repo.theme || '其他项目') + '」' : '已取消收藏')) : '设备未能保存到本地';
     notice.hidden = false;
+    if (state.auth) {
+      try {
+        await setGitHubStar(repo,!wasSaved);
+        notice.textContent = !wasSaved ? '已收藏，并同步到 GitHub' : '已取消收藏，并同步到 GitHub';
+      } catch {
+        if (wasSaved) state.saved.set(key,repo); else state.saved.delete(key);
+        storage.put('saved',[...state.saved.values()]);
+        updateSave(save,repo);
+        notice.textContent = 'GitHub 同步失败，收藏状态已恢复';
+      }
+    }
   });
   actions.append(save);
   const notice = paragraph('','save-status');
@@ -811,6 +876,73 @@ function go(view) {
   render();
   window.scrollTo(0,0);
 }
+async function setGitHubStar(repo,saved) {
+  const response = await fetch('/api/github/stars?repo=' + encodeURIComponent(repo.full_name),{
+    method:saved ? 'PUT' : 'DELETE',headers:{Accept:'application/json'}
+  });
+  if (response.status === 401) {
+    state.auth = null;
+    renderAccount();
+    throw new Error('登录已过期');
+  }
+  if (!response.ok && response.status !== 204) throw new Error('GitHub HTTP ' + response.status);
+}
+async function syncGitHubStars({preserveLocal = true} = {}) {
+  if (!state.auth) return;
+  const remote = new Map();
+  for (let page = 1; page <= 10; page++) {
+    const response = await fetch('/api/github/stars?page=' + page,{headers:{Accept:'application/json'}});
+    if (response.status === 401) {
+      state.auth = null;
+      renderAccount();
+      throw new Error('登录已过期');
+    }
+    if (!response.ok) throw new Error('GitHub HTTP ' + response.status);
+    const data = await response.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    for (const item of items) {
+      const repo = enrich({...shape(item),searchResult:true});
+      remote.set(repoKey(repo),repo);
+    }
+    if (!data.hasMore) break;
+  }
+  const localOnly = preserveLocal ? [...state.saved.values()].filter(repo=>!remote.has(repoKey(repo))) : [];
+  state.remoteSaved = remote;
+  state.pendingLocal = localOnly;
+  state.saved = new Map([...remote,...localOnly.map(repo=>[repoKey(repo),repo])]);
+  storage.put('saved',[...state.saved.values()]);
+  renderAccount();
+  render();
+}
+function renderAccount() {
+  const signedIn = Boolean(state.auth?.user);
+  $('#account').textContent = signedIn ? '@' + state.auth.user.login : '登录 GitHub';
+  $('#account').classList.toggle('connected',signedIn);
+  $('#auth-signed-out').hidden = signedIn;
+  $('#auth-signed-in').hidden = !signedIn;
+  $('#local-import').hidden = !signedIn || state.pendingLocal.length === 0;
+  if (signedIn) {
+    $('#auth-login').textContent = '@' + state.auth.user.login;
+    $('#auth-avatar').src = state.auth.user.avatar_url || '';
+    $('#local-import-count').textContent = exact.format(state.pendingLocal.length);
+  }
+}
+function startGitHubLogin() {
+  const returnTo = location.pathname + location.search;
+  location.href = '/api/auth/login?returnTo=' + encodeURIComponent(returnTo);
+}
+async function bootstrapAuth() {
+  try {
+    const response = await fetch('/api/auth/session',{headers:{Accept:'application/json'}});
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.user) return;
+    state.auth = {user:data.user};
+    renderAccount();
+    await syncGitHubStars({preserveLocal:true});
+    if (new URLSearchParams(location.search).has('connected')) history.replaceState({},'',location.pathname);
+  } catch {}
+}
 for (const tab of document.querySelectorAll('[data-view]')) tab.addEventListener('click',()=>go(tab.dataset.view));
 $('#search-form').addEventListener('submit',event=>{ event.preventDefault(); searchGitHub($('#project-search').value); });
 $('#project-search').addEventListener('input',event=>{ $('#search-clear').hidden = !event.target.value; });
@@ -818,6 +950,37 @@ $('#search-clear').addEventListener('click',()=>{ go('discover'); $('#project-se
 $('#empty button').addEventListener('click',()=>go('discover'));
 $('#refresh').addEventListener('click',()=>refresh(true));
 $('#detail .close').addEventListener('click',()=>$('#detail').close());
+$('#account').addEventListener('click',()=>{ renderAccount(); $('#auth-dialog').showModal(); });
+$('#auth-dialog .close').addEventListener('click',()=>$('#auth-dialog').close());
+$('#auth-start').addEventListener('click',startGitHubLogin);
+$('#auth-sync').addEventListener('click',async()=>{ $('#auth-sync').textContent='同步中…'; try { await syncGitHubStars(); $('#auth-sync').textContent='同步完成'; } catch { $('#auth-sync').textContent='同步失败，请重试'; } });
+$('#local-import-yes').addEventListener('click',async()=>{
+  const button = $('#local-import-yes');
+  button.disabled = true;
+  button.textContent = '同步中…';
+  try {
+    for (const repo of state.pendingLocal) await setGitHubStar(repo,true);
+    state.pendingLocal = [];
+    await syncGitHubStars({preserveLocal:false});
+  } catch {
+    button.textContent = '部分同步失败，请重试';
+  } finally { button.disabled = false; }
+});
+$('#local-import-no').addEventListener('click',()=>{
+  state.pendingLocal = [];
+  state.saved = new Map(state.remoteSaved);
+  storage.put('saved',[...state.saved.values()]);
+  renderAccount();
+  render();
+});
+$('#auth-logout').addEventListener('click',async()=>{
+  await fetch('/api/auth/logout',{method:'POST'}).catch(()=>{});
+  state.auth = null;
+  state.remoteSaved = new Map();
+  state.pendingLocal = [];
+  renderAccount();
+});
+renderAccount();
 $('#detail').addEventListener('close',()=>{
   render();
   const key = state.trigger?.dataset.project;
@@ -830,6 +993,7 @@ document.addEventListener('visibilitychange',()=>{
 if (location.protocol !== 'file:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 render();
 refresh();
+bootstrapAuth();
 
 </script>
 </body>
