@@ -52,6 +52,37 @@ test('候选必须逐项命中核心能力的可核验术语',()=>{
   assert.equal(search.capabilityEvidenceSupported(incomplete,checks),false);
 });
 
+test('多项必须能力会自动补充交叉召回词而不是依赖领域特判',()=>{
+  const plan = {
+    goal:'评测 Agent 是否可靠并追踪每一步调用',
+    queries:['LLM agent reliability benchmark'],
+    capability_checks:[
+      {name:'Agent Evaluation',evidence_terms:['evaluation','benchmark']},
+      {name:'Agent Tracing',evidence_terms:['tracing','observability']}
+    ]
+  };
+  const queries = search.complementaryQueries(plan);
+  assert.ok(queries.some(query=>/agent evaluation (?:tracing|observability)/i.test(query)));
+  assert.ok(queries.includes('LLM agent reliability benchmark'));
+});
+
+test('README 摘要优先保留能证明核心能力的后置段落',()=>{
+  const raw = '# Project\nA polished platform for AI teams.\n\n## Install\nRun npm install.\n\n## Evaluation\nCompare agent evaluations across datasets and trace every tool call.';
+  const excerpt = search.selectReadmeExcerpt(raw,[
+    {name:'Agent Evaluation',evidence_terms:['agent evaluation']},
+    {name:'Tool Tracing',evidence_terms:['trace tool call']}
+  ]);
+  assert.match(excerpt,/Compare agent evaluations/);
+  assert.match(excerpt,/trace every tool call/);
+});
+
+test('证据词归一化兼容连字符、复数和 tracing 等词形',()=>{
+  assert.deepEqual([...search.tokenSet('tool-call_tracing')],['call','tracing']);
+  assert.equal(search.stemToken('tracing'),'trace');
+  assert.equal(search.stemToken('evaluations'),'evaluation');
+  assert.equal(search.stemToken('logging'),'log');
+});
+
 test('排序结果必须为每项核心能力提供可回查证据',()=>{
   const item = {description:'Agent evaluation platform with tool call tracing',topics:['observability'],readme_excerpt:'Trace every tool call and compare agent evaluations.'};
   const claims = [
