@@ -112,7 +112,7 @@ async function addChineseCopy(req,input,items) {
       full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count
     }));
     return askModel(req,[
-      {role:'system',content:'你筛选 GitHub 搜索结果并写中文卡片。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"title":"一句中文标题","summary":"一句中文说明"}]}。必须为输入中的每个项目返回一项并保持顺序与 full_name；确实不符合用户需求时 relevant=false。title 说明用户能用它做什么，不复述仓库名；summary 结合仓库描述和用户需求说明核心能力，必须客观，不虚构。每项都只写一句，避免营销话术。'},
+      {role:'system',content:'你筛选 GitHub 搜索结果并写中文项目介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"title":"一句中文标题","summary":"一句中文说明","bullets":["能力一","能力二"]}]}。必须为输入中的每个项目返回一项并保持顺序与 full_name；确实不符合用户需求时 relevant=false。title 说明用户能用它做什么，不复述仓库名；summary 结合仓库描述和用户需求说明核心用途；bullets 提炼 2-3 个从输入资料可确认的能力。必须客观，不虚构，避免营销话术。'},
       {role:'user',content:JSON.stringify({request:input,candidates})}
     ],1200);
   }));
@@ -125,7 +125,32 @@ async function addChineseCopy(req,input,items) {
   return items.flatMap(item=>{
     const text = copy.get(String(item.full_name).toLowerCase());
     if (text?.relevant === false) return [];
-    return [text ? {...item,ai_title:cleanQuery(text.title).slice(0,44),ai_summary:cleanQuery(text.summary).slice(0,120)} : item];
+    return [text ? {...item,ai_title:cleanQuery(text.title).slice(0,44),ai_summary:cleanQuery(text.summary).slice(0,160),ai_bullets:(Array.isArray(text.bullets) ? text.bullets : []).map(cleanQuery).filter(Boolean).slice(0,3)} : item];
+  });
+}
+
+async function describeItems(req,items) {
+  if (!items.length) return [];
+  const chunks = [];
+  for (let index = 0; index < items.length; index += 8) chunks.push(items.slice(index,index + 8));
+  const batches = await Promise.allSettled(chunks.map(async chunk=>{
+    const candidates = chunk.map(item=>({
+      full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count
+    }));
+    return askModel(req,[
+      {role:'system',content:'你为 GitHub 项目信息流写准确、易懂的中文介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","title":"一句中文标题","summary":"一句中文说明","bullets":["能力一","能力二"]}]}。必须为输入中的每个项目返回一项并保持顺序与 full_name。title 直接说明这个项目能帮用户做什么，不复述仓库名；summary 用一句话介绍用途、核心能力或适合谁；bullets 提炼 2-3 个从仓库描述和 topics 可确认的能力。不要写 Star 数，不要写“点击查看 GitHub”，不要虚构，不用营销话术。'},
+      {role:'user',content:JSON.stringify({candidates})}
+    ],1200);
+  }));
+  const copy = new Map();
+  for (const batch of batches) if (batch.status === 'fulfilled') {
+    for (const item of Array.isArray(batch.value.items) ? batch.value.items : []) {
+      copy.set(String(item.full_name || '').toLowerCase(),item);
+    }
+  }
+  return items.map(item=>{
+    const text = copy.get(String(item.full_name).toLowerCase());
+    return text ? {...item,ai_title:cleanQuery(text.title).slice(0,44),ai_summary:cleanQuery(text.summary).slice(0,160),ai_bullets:(Array.isArray(text.bullets) ? text.bullets : []).map(cleanQuery).filter(Boolean).slice(0,3)} : item;
   });
 }
 
@@ -133,6 +158,15 @@ module.exports = async function handler(req,res) {
   res.setHeader('Cache-Control','no-store');
   res.setHeader('X-Content-Type-Options','nosniff');
   if (req.method !== 'POST') return res.status(405).json({error:'method_not_allowed'});
+  if (req.body?.mode === 'describe') {
+    const items = (Array.isArray(req.body?.items) ? req.body.items : []).filter(item=>item && typeof item.full_name === 'string').slice(0,32).map(shape);
+    if (!items.length) return res.status(400).json({error:'items_required'});
+    try {
+      return res.status(200).json({items:await describeItems(req,items)});
+    } catch {
+      return res.status(502).json({error:'description_unavailable'});
+    }
+  }
   const input = String(req.body?.query || '').trim().slice(0,240);
   if (!input) return res.status(400).json({error:'query_required'});
 
