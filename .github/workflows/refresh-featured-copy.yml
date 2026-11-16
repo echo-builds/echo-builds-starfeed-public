@@ -1,0 +1,43 @@
+name: Refresh verified Chinese project cards
+
+on:
+  schedule:
+    - cron: "25 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verified-card-copy-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Refresh only with explicitly opted-in free key
+        env:
+          ENABLE_FREE_GEMINI: ${{ secrets.ENABLE_FREE_GEMINI }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_FREE_MODEL: gemini-2.5-flash-lite
+          COPY_REFRESH_LIMIT: "4"
+        run: node scripts/refresh-featured-copy.cjs
+      - name: Verify changed catalog with automated tests
+        run: npm test
+      - name: Commit verified changes (if any)
+        run: |
+          if git diff --quiet -- data/featured-copy.json; then
+            echo "No catalog update; no commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/featured-copy.json
+          git commit -m "content: refresh verified Chinese project descriptions"
+          git push
