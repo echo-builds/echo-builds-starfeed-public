@@ -43,6 +43,17 @@ test('通用排序把匹配证据放在纯 Star 之前',()=>{
   assert.equal(ranked[0].full_name,'demo/relevant');
 });
 
+test('降级排序不会因超长资源列表偶然出现关键词就优先推荐',()=>{
+  const plan = {goal:'整理用户访谈并提取需求证据',intent:'用户访谈分析工具',core_capabilities:['interview analysis','evidence extraction'],constraints:[],queries:['interview analysis evidence extraction']};
+  const items = [
+    {full_name:'demo/interview-tool',name:'interview-tool',description:'User interview analysis and evidence extraction',topics:['interview-analysis'],readme_excerpt:'Organize interview transcripts into themes.',stargazers_count:900,forks_count:20,pushed_at:new Date().toISOString(),license:{spdx_id:'MIT'}},
+    {full_name:'demo/awesome-tools',name:'awesome-tools',description:'A curated list of developer tools',topics:['awesome-list'],readme_excerpt:'Thousands of entries including interview analysis and evidence extraction.',stargazers_count:100000,forks_count:2000,pushed_at:new Date().toISOString(),license:{spdx_id:'MIT'}}
+  ];
+  const ranked = search.fallbackRank(plan,items);
+  assert.equal(ranked[0].full_name,'demo/interview-tool');
+  assert.ok(!ranked.some(item=>item.full_name === 'demo/awesome-tools'));
+});
+
 test('推荐价值信号包含技术基础设施而非只认终端产品',()=>{
   assert.ok(discover.attentionSignal({name:'runtime',description:'LLM inference runtime with evaluation and observability',topics:['model-serving']}) >= 2);
   assert.equal(discover.attentionSignal({name:'recipes',description:'A personal cooking recipe collection',topics:['food']}),0);
