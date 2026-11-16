@@ -39,7 +39,12 @@ async function translate(req,markdown) {
 }
 
 function isMostlyChinese(text) {
-  const sample = String(text || '').replace(/[`#>*_\-\[\]()!\d\s]/g,'').slice(0,3000);
+  const sample = String(text || '')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/https?:\/\/\S+/gi,' ')
+    .replace(/```[\s\S]*?```/g,' ')
+    .replace(/[`#>*_\-\[\]()!\d\s]/g,'')
+    .slice(0,3000);
   if (!sample) return false;
   const chinese = (sample.match(/[㐀-鿿]/g) || []).length;
   return chinese / sample.length > .32;
@@ -136,8 +141,18 @@ module.exports = async function handler(req,res) {
     const experience = productExperience(repo,release);
     const selected = resolveImages(selectProductMarkdown(readme),repo);
     if (!selected) return res.status(200).json({repo,experience,readme_markdown:'',readme_url:`https://github.com/${fullName}#readme`});
-    const translated = isMostlyChinese(selected) ? selected : await translate(req,selected);
-    return res.status(200).json({repo,experience,readme_markdown:translated,readme_url:`https://github.com/${fullName}#readme`,translated:!isMostlyChinese(selected)});
+    const chinese = isMostlyChinese(selected);
+    let content = selected;
+    let translated = false;
+    if (!chinese) {
+      try {
+        content = await translate(req,selected);
+        translated = true;
+      } catch {
+        content = selected;
+      }
+    }
+    return res.status(200).json({repo,experience,readme_markdown:content,readme_url:`https://github.com/${fullName}#readme`,translated});
   } catch (error) {
     return res.status(502).json({error:'project_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
