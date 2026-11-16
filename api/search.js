@@ -3,7 +3,7 @@ const {getSession,refreshSession,setSession} = require('./_lib/session');
 const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
-const MAX_CANDIDATES = 24;
+const MAX_CANDIDATES = 18;
 
 function jsonFrom(text) {
   const source = String(text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
@@ -25,15 +25,15 @@ async function askModel(req,messages,maxTokens = 1200) {
   const token = aiToken(req);
   if (!token) throw new Error('ai_unavailable');
   let response;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     response = await fetch(GATEWAY_API,{
       method:'POST',
       headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
       body:JSON.stringify({model:SEARCH_MODEL,reasoning:{effort:'none'},temperature:0.1,max_tokens:maxTokens,messages}),
-      signal:AbortSignal.timeout(18000)
+      signal:AbortSignal.timeout(25000)
     });
-    if (response.status !== 429 || attempt) break;
-    const retryAfter = Math.min(2500,Math.max(800,Number(response.headers.get('retry-after') || 1) * 1000));
+    if (response.ok || ![429,502,503,504].includes(response.status) || attempt === 3) break;
+    const retryAfter = Math.min(7000,Math.max(1500,Number(response.headers.get('retry-after') || attempt + 1) * 1000));
     await new Promise(resolve=>setTimeout(resolve,retryAfter));
   }
   if (!response.ok) throw new Error('ai_gateway_' + response.status);
@@ -164,18 +164,30 @@ function fallbackRank(plan,items) {
   const needTokens = tokenSet([plan.goal,plan.intent,...plan.core_capabilities,...plan.constraints,...plan.queries].join(' '));
   const queryTokenSets = plan.queries.map(tokenSet).filter(tokens=>tokens.size);
   return items.map(item=>{
-    const source = `${item.full_name} ${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`;
+    const primary = `${item.full_name} ${item.description || ''} ${(item.topics || []).join(' ')}`;
+    const source = `${primary} ${item.readme_excerpt || ''}`;
+    const primaryTokens = tokenSet(primary);
     const sourceTokens = tokenSet(source);
     let overlap = 0;
+    let primaryOverlap = 0;
     for (const token of needTokens) if (sourceTokens.has(token) || source.toLowerCase().includes(token)) overlap++;
+    for (const token of needTokens) if (primaryTokens.has(token) || primary.toLowerCase().includes(token)) primaryOverlap++;
     let bestQueryCoverage = 0;
+    let bestPrimaryCoverage = 0;
     for (const queryTokens of queryTokenSets) {
       let matched = 0;
+      let primaryMatched = 0;
       for (const token of queryTokens) if (sourceTokens.has(token) || source.toLowerCase().includes(token)) matched++;
+      for (const token of queryTokens) if (primaryTokens.has(token) || primary.toLowerCase().includes(token)) primaryMatched++;
       bestQueryCoverage = Math.max(bestQueryCoverage,matched / queryTokens.size);
+      bestPrimaryCoverage = Math.max(bestPrimaryCoverage,primaryMatched / queryTokens.size);
     }
     const overallCoverage = needTokens.size ? overlap / needTokens.size : 0;
-    const relevance = Math.min(92,35 + bestQueryCoverage * 45 + overallCoverage * 20);
+    const primaryCoverage = needTokens.size ? primaryOverlap / needTokens.size : 0;
+    const wantsCollection = /合集|列表|目录|资源|collection|curated list|awesome list|directory/i.test(`${plan.intent} ${plan.goal}`);
+    const isCollection = /^awesome[-_]/i.test(item.name || '') || /curated (?:list|collection)|awesome list/i.test(item.description || '');
+    const collectionPenalty = isCollection && !wantsCollection ? 25 : 0;
+    const relevance = Math.max(0,Math.min(92,32 + bestPrimaryCoverage * 40 + bestQueryCoverage * 20 + primaryCoverage * 15 + overallCoverage * 8 - collectionPenalty));
     const quality = metadataQuality(item);
     const rank = relevance * .72 + quality * .12 + activityScore(item) * .08 + popularityScore(item) * .08;
     const {readme_excerpt,...repo} = item;
@@ -187,7 +199,7 @@ function fallbackRank(plan,items) {
 
 async function rankAndDescribe(req,input,plan,items) {
   if (!items.length) return [];
-  const candidates = items.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:item.readme_excerpt}));
+  const candidates = items.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:clean(item.readme_excerpt,900)}));
   let result;
   try {
     result = await askModel(req,[
@@ -255,7 +267,7 @@ module.exports = async function handler(req,res) {
     const diversified = new Map();
     for (const batch of batches) if (batch.status === 'fulfilled') {
       for (const item of batch.value) if (item?.full_name && !item.archived && !item.fork) all.set(item.full_name.toLowerCase(),shape(item));
-      for (const item of batch.value.slice(0,8)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
+      for (const item of batch.value.slice(0,6)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
     }
     const remainder = [...all.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
     for (const item of remainder) if (diversified.size < MAX_CANDIDATES) diversified.set(item.full_name.toLowerCase(),item);
