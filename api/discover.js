@@ -109,8 +109,25 @@ function likelyRelevant(repo) {
   return strong && !excluded;
 }
 
+function fallbackSummary(repo) {
+  const original = clean(repo.description,260);
+  if (/[㐀-鿿]/.test(original)) {
+    const boundary = original.search(/[。！？]\s+(?=[A-Z][A-Za-z])/);
+    return clean(boundary >= 0 ? original.slice(0,boundary + 1) : original,110);
+  }
+  const text = `${repo.name} ${original} ${(repo.topics || []).join(' ')}`.toLowerCase();
+  if (/video|film|animation/.test(text)) return '面向视频生成、编辑或分析的 AI 工具，可用于了解新的内容生产方式。';
+  if (/audio|voice|speech|transcri|podcast/.test(text)) return '面向语音、音频或转写场景的 AI 工具，可用于内容处理与产品能力验证。';
+  if (/design|prototype|ui|ux/.test(text)) return '面向产品设计、原型或界面工作流的 AI 工具。';
+  if (/rag|knowledge|search/.test(text)) return '面向知识检索、文档问答或搜索体验的 AI 工具。';
+  if (/model|inference|gpu|deploy/.test(text)) return '面向 AI 模型运行、部署或管理的开源工具。';
+  if (/code|coding|developer|software/.test(text)) return '帮助开发者完成编码、调试或工程任务的 AI 工具。';
+  if (/skill|agent|mcp|workflow|automation/.test(text)) return '为 AI Agent 提供技能、工具调用或自动化工作流能力。';
+  return '与 AI 产品、Agent 或工作流相关的近期高星开源项目。';
+}
+
 function fallbackCopy(repo,kind,release) {
-  const summary = clean(repo.description,160) || `${repo.name} 的开源项目介绍暂缺。`;
+  const summary = fallbackSummary(repo);
   return {
     relevant:true,
     quality_score:55 + Math.min(25,Math.round(Math.log10(Math.max(10,repo.stargazers_count || 0)) * 5)),
@@ -178,7 +195,7 @@ module.exports = async function handler(req,res) {
       const key = item.repo.full_name.toLowerCase();
       const hasDecision = decisions.has(key);
       const decision = decisions.get(key) || fallbackCopy(item.repo,item.kind,item.release);
-      const relevant = hasDecision ? decision.relevant !== false && Number(decision.quality_score || 0) >= 62 : fallbackRelevant(item.repo,item.readme) && /[㐀-鿿]/.test(String(item.repo.description || ''));
+      const relevant = hasDecision ? decision.relevant !== false && Number(decision.quality_score || 0) >= 62 : fallbackRelevant(item.repo,item.readme);
       if (!relevant) return [];
       const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
       const freshness = Math.max(0,90 - Math.max(0,(now - Date.parse(freshnessDate || 0)) / DAY));
