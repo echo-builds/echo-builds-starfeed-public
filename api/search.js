@@ -106,7 +106,7 @@ function fallbackPlan(input) {
 async function planSearch(req,input) {
   try {
     const plan = await askModel(req,[
-      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":[{"name":"必须能力","evidence_terms":["README 中可能出现的英文术语或短语"]}],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries 和 constraints 必须是字符串数组。core_capabilities 必须把每项不可缺少的能力单独列出，并为每项给出 2-6 个可在 Description、Topics 或 README 中核验的英文术语、同义词或短语；不要把只属于偏好或质量判断的词列为必须能力。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询必须像人在 GitHub 上发现仓库时会使用的产品类别、技术类别或输入输出组合，至少一条使用常见产品类别或仓库类别；不要输出只有 code export、key points 这类过宽的结果字段。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-5 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
+      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":[{"name":"必须能力","evidence_terms":["README 中可能出现的英文术语或短语"]}],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries 和 constraints 必须是字符串数组。core_capabilities 只能来自用户明确提出的要求或完成输入到输出转换不可缺少的步骤，绝不能自行增加跨平台、特定技术栈、协作方式等新的必须条件。逐项覆盖用户原话中的每个动作、输入、输出和明确限制；例如一句需求包含转换、生成、多人或本地运行时，这些不同要求都必须分别保留，不能因某个候选领域更熟悉而省略。每项不可缺少的能力单独列出，并给出 2-6 个可在 Description、Topics 或 README 中核验的英文术语、同义词或短语；不要把只属于偏好或质量判断的词列为必须能力。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询必须使用英文，像人在 GitHub 上发现仓库时会使用的产品类别、技术类别或输入输出组合，至少一条使用常见产品类别或仓库类别；不要带 GitHub、site:github.com，也不要输出只有 code export、key points 这类过宽的结果字段。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-5 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
       {role:'user',content:JSON.stringify({request:input})}
     ],1800);
     const queries = unique(plan.queries ?? plan.search_queries ?? plan.github_queries ?? plan.search_strategies ?? plan.strategies,5);
@@ -138,7 +138,7 @@ function shape(item) {
 }
 
 async function githubSearch(query,token) {
-  const cleaned = clean(query,220);
+  const cleaned = clean(query,220).replace(/\bsite:github\.com\b/ig,' ').replace(/\bgithub\b/ig,' ').replace(/\s+/g,' ').trim();
   const scope = /\bin:/.test(cleaned) ? '' : ' in:name,description,readme,topics';
   const q = `${cleaned}${scope} archived:false fork:false`;
   const params = new URLSearchParams({q,per_page:'35'});
@@ -270,10 +270,22 @@ function capabilityClaimsSupported(item,requiredNames,claims) {
     capability:clean(claim?.capability,100).toLowerCase(),
     quote:clean(claim?.evidence_quote ?? claim?.quote,220)
   })).filter(claim=>claim.capability && claim.quote);
-  return required.every(name=>{
-    const claim = entries.find(entry=>entry.capability === name);
+  return required.every((name,index)=>{
+    const nameTokens = tokenSet(name);
+    const claim = entries.find(entry=>entry.capability === name) || entries.find(entry=>{
+      const claimTokens = tokenSet(entry.capability);
+      return [...nameTokens].some(token=>claimTokens.has(token));
+    }) || (entries.length === required.length ? entries[index] : null);
     return Boolean(claim && evidenceSupported(item,[claim.quote]));
   });
+}
+
+function wantsCollection(plan,input = '') {
+  return /合集|列表|目录|资源|collection|curated list|awesome list|directory/i.test(`${input} ${plan?.intent || ''} ${plan?.goal || ''}`);
+}
+
+function isCollectionCandidate(item) {
+  return /^awesome[-_]/i.test(item.name || '') || /curated (?:list|collection)|awesome list|collection of (?:tools|projects|resources)|resources? list/i.test(`${item.description || ''} ${String(item.readme_excerpt || '').slice(0,500)}`);
 }
 
 function fallbackRank(plan,items) {
@@ -300,9 +312,7 @@ function fallbackRank(plan,items) {
     }
     const overallCoverage = needTokens.size ? overlap / needTokens.size : 0;
     const primaryCoverage = needTokens.size ? primaryOverlap / needTokens.size : 0;
-    const wantsCollection = /合集|列表|目录|资源|collection|curated list|awesome list|directory/i.test(`${plan.intent} ${plan.goal}`);
-    const isCollection = /^awesome[-_]/i.test(item.name || '') || /curated (?:list|collection)|awesome list/i.test(item.description || '');
-    const collectionPenalty = isCollection && !wantsCollection ? 25 : 0;
+    const collectionPenalty = isCollectionCandidate(item) && !wantsCollection(plan) ? 25 : 0;
     const relevance = Math.max(0,Math.min(92,32 + bestPrimaryCoverage * 40 + bestQueryCoverage * 20 + primaryCoverage * 15 + overallCoverage * 8 - collectionPenalty));
     const quality = metadataQuality(item);
     const rank = relevance * .72 + quality * .12 + activityScore(item) * .08 + popularityScore(item) * .08;
@@ -314,13 +324,13 @@ function fallbackRank(plan,items) {
 }
 
 async function rankAndDescribe(req,input,plan,items) {
-  const eligible = items.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks));
+  const eligible = items.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks) && (wantsCollection(plan,input) || !isCollectionCandidate(item)));
   if (!eligible.length) return [];
   const candidates = eligible.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:clean(item.readme_excerpt,1400)}));
   let result;
   try {
     result = await askModel(req,[
-      {role:'system',content:'你负责按用户真实任务筛选和排序 GitHub 仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"evidence_score":0,"quality_score":0,"title":"中文标题","summary":"中文说明","bullets":["能力证据"],"evidence_quotes":["从 Description、Topics 或 README 原样复制的短句"],"capability_evidence":[{"capability":"与 core_capabilities 完全相同的名称","evidence_quote":"直接证明该项目提供此能力的原文"}]}]}。只返回真正相关且 relevance_score>=60 的项目，不要为不相关候选返回占位项；full_name 必须来自输入且不得修改。每个入选项目必须为每一项 core_capabilities 返回一条 capability_evidence，capability 名称必须与输入完全一致，evidence_quote 必须逐字复制资料原文并直接证明项目本身提供这项能力。教程、课程、资源合集或示例仅仅提到某项能力，不等于项目提供可使用的解决方案；除非用户明确要教程或合集，否则不要入选。每个入选项目还必须给出 1-3 条 evidence_quotes，逐字复制输入资料中的原文、不得翻译或改写，并直接支持 summary 中的全部能力判断。缺少任一关键能力的明确证据就不要返回该项目；相邻能力不能替代用户要求，例如规划、测试或代码审查不能证明具备调用链追踪。第一优先级是核心需求匹配：项目的主要输入、输出和能力必须真正帮助完成用户目标，仅有相邻关键词不算匹配。relevance_score 表示需求匹配程度；evidence_score 表示资料对关键能力的证据充分度；quality_score 表示文档、维护、可体验性和项目完成度。Star 与活跃度只能辅助排序，不能掩盖不相关。title 要直接说明项目解决的问题或提供的能力；summary 用具体自然的中文说明实际问题、解决方案和值得关注的新意，不堆术语。不得声称资料没有明确提供的功能。对技术项目可以解释可能带来的产品价值，但必须使用“可用于”“可能帮助”等措辞区分推测与事实。bullets 最多 2 条，只写资料可核验的能力。'},
+      {role:'system',content:'你负责按用户真实任务筛选和排序 GitHub 仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"evidence_score":0,"quality_score":0,"title":"中文标题","summary":"中文说明","bullets":["能力证据"],"evidence_quotes":["从 Description、Topics 或 README 原样复制的短句"],"capability_evidence":[{"capability":"与 core_capabilities 完全相同的名称","evidence_quote":"直接证明该项目提供此能力的原文"}]}]}。只返回真正相关且 relevance_score>=60 的项目，不要为不相关候选返回占位项；full_name 必须来自输入且不得修改。先直接核对用户原始 request 中的每一项明确要求，即使 interpretation 遗漏了某项，也必须以原始 request 为准；只完成其中一部分的项目不能作为完整匹配返回。每个入选项目必须为每一项 core_capabilities 返回一条 capability_evidence，capability 名称必须与输入完全一致，evidence_quote 必须逐字复制资料原文并直接证明项目本身提供这项能力。教程、课程、资源合集或示例仅仅提到某项能力，不等于项目提供可使用的解决方案；除非用户明确要教程或合集，否则不要入选。每个入选项目还必须给出 1-3 条 evidence_quotes，逐字复制输入资料中的原文、不得翻译或改写，并直接支持 summary 中的全部能力判断。缺少任一关键能力的明确证据就不要返回该项目；相邻能力不能替代用户要求，例如规划、测试或代码审查不能证明具备调用链追踪。第一优先级是核心需求匹配：项目的主要输入、输出和能力必须真正帮助完成用户目标，仅有相邻关键词不算匹配。relevance_score 表示需求匹配程度；evidence_score 表示资料对关键能力的证据充分度；quality_score 表示文档、维护、可体验性和项目完成度。Star 与活跃度只能辅助排序，不能掩盖不相关。title 要直接说明项目解决的问题或提供的能力；summary 用具体自然的中文说明实际问题、解决方案和值得关注的新意，不堆术语。不得声称资料没有明确提供的功能。对技术项目可以解释可能带来的产品价值，但必须使用“可用于”“可能帮助”等措辞区分推测与事实。bullets 最多 2 条，只写资料可核验的能力。'},
       {role:'user',content:JSON.stringify({request:input,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},candidates})}
     ],4800);
   } catch {
@@ -398,7 +408,7 @@ module.exports = async function handler(req,res) {
     const candidates = [...diversified.values()].slice(0,MAX_CANDIDATES);
     if (!candidates.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     const hydrated = await withReadmes(candidates,plan.capability_checks);
-    const eligibleCount = hydrated.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks)).length;
+    const eligibleCount = hydrated.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks) && (wantsCollection(plan,input) || !isCollectionCandidate(item))).length;
     const items = await rankAndDescribe(req,input,plan,hydrated);
     return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:plan.queries,diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,returned:items.length},items});
   } catch (error) {
@@ -406,4 +416,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,listText,metadataQuality,popularityScore,selectReadmeExcerpt,stemToken,tokenSet,unique};
+module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,isCollectionCandidate,listText,metadataQuality,popularityScore,selectReadmeExcerpt,stemToken,tokenSet,unique,wantsCollection};
