@@ -121,6 +121,7 @@ dialog::backdrop{background:#18161280}
 .auth-panel .primary,.auth-panel .secondary{width:100%;min-height:46px;margin-top:8px}
 .device-code{display:block;margin:14px 0 7px;padding:14px;border:1px dashed #c9beb4;border-radius:12px;background:#f7f3ee;text-align:center;font:800 25px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}
 .auth-note{font-size:12px!important}
+.auth-logout-link{display:block;margin:18px auto 0;padding:7px 12px;border:0;background:transparent;color:var(--muted);font-size:12px;text-decoration:underline;text-underline-offset:3px}
 .account-line{display:flex;align-items:center;gap:10px;margin:14px 0 6px;padding:12px;border-radius:12px;background:#f6f4f1}
 .account-line img{width:38px;height:38px;border-radius:50%}
 .account-line strong{display:block}
@@ -193,21 +194,15 @@ dialog::backdrop{background:#18161280}
     <div class="dialog-top"><button class="close" type="button" aria-label="返回">‹</button><span>GitHub 同步</span></div>
     <div class="auth-panel">
       <div id="auth-signed-out">
-        <h2 id="auth-title">同步你的 GitHub 收藏</h2>
-        <p>登录后会导入你已经 Star 的项目。之后在 RepoScroll 里收藏或取消收藏，也会同步到 GitHub。</p>
+        <h2 id="auth-title">连接 GitHub</h2>
+        <p>登录后自动同步已有 Stars，并将本机收藏合并到 GitHub。以后收藏或取消收藏也会同步更新。</p>
         <button class="primary" id="auth-start" type="button">登录 GitHub</button>
-        <p class="auth-note">只申请读取和修改 Stars。令牌由后端加密保存，网页无法读取。</p>
       </div>
       <div id="auth-signed-in" hidden>
         <h2>已连接 GitHub</h2>
-        <div class="account-line"><img id="auth-avatar" alt=""><div><strong id="auth-login"></strong><span>Stars 已同步</span></div></div>
-        <div id="local-import" hidden>
-          <p><strong id="local-import-count"></strong> 个本机收藏还没有同步到 GitHub。</p>
-          <button class="primary" id="local-import-yes" type="button">同步到 GitHub</button>
-          <button class="secondary" id="local-import-no" type="button">不导入</button>
-        </div>
-        <button class="primary" id="auth-sync" type="button">立即同步</button>
-        <button class="secondary" id="auth-logout" type="button">退出同步</button>
+        <div class="account-line"><img id="auth-avatar" alt=""><div><strong id="auth-login"></strong><span id="auth-sync-state" role="status">正在同步收藏…</span></div></div>
+        <button class="secondary" id="auth-retry" type="button" hidden>重新同步</button>
+        <button class="auth-logout-link" id="auth-logout" type="button">退出登录</button>
       </div>
     </div>
   </dialog>
@@ -510,6 +505,9 @@ const state = {
   auth:null,
   remoteSaved:new Map(),
   pendingLocal:[],
+  authSyncing:false,
+  syncNeedsRetry:false,
+  syncStatus:'',
   trigger:null, openRepo:null, refreshError:false,
   search:{query:'',items:[],loading:false,error:''}
 };
@@ -1119,32 +1117,62 @@ async function setGitHubStar(repo,saved) {
   }
   if (!response.ok && response.status !== 204) throw new Error('GitHub HTTP ' + response.status);
 }
-async function syncGitHubStars({preserveLocal = true} = {}) {
-  if (!state.auth) return;
-  const remote = new Map();
-  for (let page = 1; page <= 10; page++) {
-    const response = await fetch('/api/github/stars?page=' + page,{headers:{Accept:'application/json'}});
-    if (response.status === 401 || response.status === 403) {
-      state.auth = null;
-      renderAccount();
-      throw new Error(response.status === 401 ? '登录已过期' : 'GitHub 授权需重新连接');
-    }
-    if (!response.ok) throw new Error('GitHub HTTP ' + response.status);
-    const data = await response.json();
-    const items = Array.isArray(data.items) ? data.items : [];
-    for (const item of items) {
-      const repo = enrich({...shape(item),searchResult:true});
-      remote.set(repoKey(repo),repo);
-    }
-    if (!data.hasMore) break;
-  }
-  const localOnly = preserveLocal ? [...state.saved.values()].filter(repo=>!remote.has(repoKey(repo))) : [];
-  state.remoteSaved = remote;
-  state.pendingLocal = localOnly;
-  state.saved = new Map([...remote,...localOnly.map(repo=>[repoKey(repo),repo])]);
-  storage.put('saved',[...state.saved.values()]);
+async function syncGitHubStars() {
+  if (!state.auth || state.authSyncing) return;
+  state.authSyncing = true;
+  state.syncNeedsRetry = false;
+  state.syncStatus = '正在同步收藏…';
   renderAccount();
-  render();
+  try {
+    const remote = new Map();
+    for (let page = 1; page <= 10; page++) {
+      const response = await fetch('/api/github/stars?page=' + page,{headers:{Accept:'application/json'}});
+      if (response.status === 401 || response.status === 403) {
+        state.auth = null;
+        throw new Error('GitHub 授权已失效，请重新登录');
+      }
+      if (!response.ok) throw new Error('无法获取 GitHub Stars');
+      const data = await response.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      for (const item of items) {
+        const repo = enrich({...shape(item),searchResult:true});
+        if (validRepo(repo)) remote.set(repoKey(repo),repo);
+      }
+      if (!data.hasMore) break;
+      if (page === 10) throw new Error('GitHub Stars 数量超过当前同步范围');
+    }
+
+    // Remote Stars are never deleted. Local-only saved projects are uploaded
+    // automatically; failed uploads are retained locally for safe retry.
+    const localOnly = [...state.saved.values()].filter(repo=>validRepo(repo) && !remote.has(repoKey(repo)));
+    state.remoteSaved = remote;
+    state.saved = new Map([...remote,...state.saved]);
+    storage.put('saved',[...state.saved.values()]);
+    const failed = [];
+    for (const repo of localOnly) {
+      if (!state.auth) { failed.push(repo); continue; }
+      // Do not re-add projects that were removed while the sync was running.
+      if (!state.saved.has(repoKey(repo))) continue;
+      try {
+        await setGitHubStar(repo,true);
+        state.remoteSaved.set(repoKey(repo),repo);
+      } catch {
+        failed.push(repo);
+      }
+    }
+    state.pendingLocal = failed;
+    state.syncNeedsRetry = failed.length > 0;
+    state.syncStatus = failed.length
+      ? failed.length + ' 个本机收藏暂未同步，已保留在本机'
+      : '已同步 ' + exact.format(state.remoteSaved.size) + ' 个收藏';
+  } catch (error) {
+    state.syncNeedsRetry = Boolean(state.auth);
+    state.syncStatus = '同步未完成，本机收藏已保留';
+  } finally {
+    state.authSyncing = false;
+    renderAccount();
+    render();
+  }
 }
 function renderAccount() {
   const signedIn = Boolean(state.auth?.user);
@@ -1152,11 +1180,12 @@ function renderAccount() {
   $('#account').classList.toggle('connected',signedIn);
   $('#auth-signed-out').hidden = signedIn;
   $('#auth-signed-in').hidden = !signedIn;
-  $('#local-import').hidden = !signedIn || state.pendingLocal.length === 0;
   if (signedIn) {
     $('#auth-login').textContent = '@' + state.auth.user.login;
     $('#auth-avatar').src = state.auth.user.avatar_url || '';
-    $('#local-import-count').textContent = exact.format(state.pendingLocal.length);
+    $('#auth-sync-state').textContent = state.syncStatus || '正在同步收藏…';
+    $('#auth-retry').hidden = state.authSyncing || !state.syncNeedsRetry;
+    $('#auth-retry').disabled = state.authSyncing;
   }
 }
 function startGitHubLogin() {
@@ -1171,7 +1200,7 @@ async function bootstrapAuth() {
     if (!data.user) return;
     state.auth = {user:data.user};
     renderAccount();
-    await syncGitHubStars({preserveLocal:true});
+    await syncGitHubStars();
     if (new URLSearchParams(location.search).has('connected')) {
       const url = new URL(location.href);
       url.searchParams.delete('connected');
@@ -1195,31 +1224,15 @@ $('#account').addEventListener('click',()=>{ renderAccount(); $('#auth-dialog').
 $('#auth-dialog .close').addEventListener('click',()=>$('#auth-dialog').close());
 $('#auth-dialog').addEventListener('click',event=>{ if (clickedDialogBackdrop($('#auth-dialog'),event)) $('#auth-dialog').close(); });
 $('#auth-start').addEventListener('click',startGitHubLogin);
-$('#auth-sync').addEventListener('click',async()=>{ $('#auth-sync').textContent='同步中…'; try { await syncGitHubStars(); $('#auth-sync').textContent='同步完成'; } catch { $('#auth-sync').textContent='同步失败，请重试'; } });
-$('#local-import-yes').addEventListener('click',async()=>{
-  const button = $('#local-import-yes');
-  button.disabled = true;
-  button.textContent = '同步中…';
-  try {
-    for (const repo of state.pendingLocal) await setGitHubStar(repo,true);
-    state.pendingLocal = [];
-    await syncGitHubStars({preserveLocal:false});
-  } catch {
-    button.textContent = '部分同步失败，请重试';
-  } finally { button.disabled = false; }
-});
-$('#local-import-no').addEventListener('click',()=>{
-  state.pendingLocal = [];
-  state.saved = new Map(state.remoteSaved);
-  storage.put('saved',[...state.saved.values()]);
-  renderAccount();
-  render();
-});
+$('#auth-retry').addEventListener('click',()=>syncGitHubStars());
 $('#auth-logout').addEventListener('click',async()=>{
   await fetch('/api/auth/logout',{method:'POST'}).catch(()=>{});
   state.auth = null;
   state.remoteSaved = new Map();
   state.pendingLocal = [];
+  state.syncStatus = '';
+  state.syncNeedsRetry = false;
+  state.authSyncing = false;
   renderAccount();
 });
 renderAccount();
