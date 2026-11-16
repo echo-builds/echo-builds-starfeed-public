@@ -100,6 +100,22 @@ test('能力证据名称轻微变化时按内容匹配而不是整批误杀',()=
     {capability:'本地离线执行',evidence_quote:'Run models locally'}
   ];
   assert.equal(search.capabilityClaimsSupported(item,['移动端推理','离线运行'],claims),true);
+  assert.equal(search.capabilityClaimsSupported(item,[
+    {name:'移动端推理',evidence_terms:['mobile inference','on-device']},
+    {name:'离线运行',evidence_terms:['offline execution','run models locally']}
+  ],claims),true);
+});
+
+test('能力证据不能用相邻能力冒充用户要求的录制回放',()=>{
+  const item = {description:'Browser automation server using Playwright',topics:['mcp'],readme_excerpt:'Provides code generation in TypeScript and Python.'};
+  const claims = [
+    {capability:'网页操作录制',evidence_quote:'Browser automation server using Playwright'},
+    {capability:'生成脚本',evidence_quote:'Provides code generation in TypeScript and Python.'}
+  ];
+  assert.equal(search.capabilityClaimsSupported(item,[
+    {name:'网页操作录制',evidence_terms:['record user actions','record and replay','interaction capture']},
+    {name:'生成脚本',evidence_terms:['code generation','export script']}
+  ],claims),false);
 });
 
 test('用户未要求资源列表时识别并排除合集候选',()=>{
