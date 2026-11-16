@@ -263,6 +263,27 @@ function evidenceSupported(item,quotes) {
   return normalized.length > 0 && normalized.every(quote=>source.includes(quote));
 }
 
+function meaningUnits(value) {
+  const text = String(value || '').toLowerCase();
+  const units = new Set([...tokenSet(text)]);
+  const ignored = new Set(['一个','项目','工具','支持','可以','需要','希望','开源','使用','找到','能够','最好']);
+  for (const sequence of text.match(/[㐀-鿿]{2,}/gu) || []) {
+    for (let index = 0; index < sequence.length - 1; index++) {
+      const pair = sequence.slice(index,index + 2);
+      if (!ignored.has(pair)) units.add(pair);
+    }
+  }
+  return units;
+}
+
+function requestEvidenceSupported(input,quotes) {
+  const request = meaningUnits(input);
+  const evidence = meaningUnits((Array.isArray(quotes) ? quotes : []).join(' '));
+  if (!request.size || !evidence.size) return false;
+  const matched = [...request].filter(unit=>evidence.has(unit)).length;
+  return matched >= 2 && matched / request.size >= .16;
+}
+
 function capabilityClaimsSupported(item,requiredNames,claims) {
   const required = unique(Array.isArray(requiredNames) ? requiredNames : [],8).map(name=>name.toLowerCase());
   if (!required.length) return true;
@@ -345,7 +366,8 @@ async function rankAndDescribe(req,input,plan,items) {
     const quality = Math.max(0,Math.min(100,Number(decision?.quality_score || metadataQuality(item))));
     const evidenceQuotes = unique(Array.isArray(decision?.evidence_quotes) ? decision.evidence_quotes : [],3);
     const capabilityEvidence = Array.isArray(decision?.capability_evidence) ? decision.capability_evidence : [];
-    if (!decision || decision.relevant === false || relevance < 60 || evidence < 35 || !evidenceSupported(item,evidenceQuotes) || !capabilityClaimsSupported(item,plan.core_capabilities,capabilityEvidence)) return [];
+    const fallbackEvidence = plan.mode !== 'fallback' || requestEvidenceSupported(input,evidenceQuotes);
+    if (!decision || decision.relevant === false || relevance < 60 || evidence < 35 || !evidenceSupported(item,evidenceQuotes) || !capabilityClaimsSupported(item,plan.core_capabilities,capabilityEvidence) || !fallbackEvidence) return [];
     const rank = relevance * .72 + evidence * .12 + quality * .08 + activityScore(item) * .04 + popularityScore(item) * .04;
     const {readme_excerpt,...repo} = item;
     return [{...repo,relevance_score:relevance,evidence_score:evidence,quality_score:quality,rank_score:rank,ai_title:clean(decision.title,60) || item.name,ai_summary:clean(decision.summary,180),ai_bullets:unique(Array.isArray(decision.bullets) ? decision.bullets : [],2),evidence_quotes:evidenceQuotes}];
@@ -416,4 +438,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,isCollectionCandidate,listText,metadataQuality,popularityScore,selectReadmeExcerpt,stemToken,tokenSet,unique,wantsCollection};
+module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,isCollectionCandidate,listText,meaningUnits,metadataQuality,popularityScore,requestEvidenceSupported,selectReadmeExcerpt,stemToken,tokenSet,unique,wantsCollection};
