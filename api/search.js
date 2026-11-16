@@ -46,7 +46,7 @@ async function askModel(req,messages,maxTokens = 1200) {
 function listText(value) {
   if (typeof value === 'string' || typeof value === 'number') return clean(value,220);
   if (!value || typeof value !== 'object') return '';
-  const candidate = value.query ?? value.q ?? value.search ?? value.value ?? value.text ?? value.name ?? value.capability ?? value.constraint ?? value.term ?? value.terms;
+  const candidate = value.query ?? value.q ?? value.search ?? value.value ?? value.text ?? value.name ?? value.capability ?? value.constraint ?? value.term ?? value.terms ?? value.evidence_quote ?? value.quote;
   if (Array.isArray(candidate)) return clean(candidate.join(' '),220);
   return typeof candidate === 'string' || typeof candidate === 'number' ? clean(candidate,220) : '';
 }
@@ -160,6 +160,12 @@ function metadataQuality(item) {
   return Math.min(100,score);
 }
 
+function evidenceSupported(item,quotes) {
+  const source = clean(`${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`,100000).toLowerCase();
+  const normalized = unique(Array.isArray(quotes) ? quotes : [],3).map(quote=>quote.toLowerCase()).filter(quote=>quote.length >= 6);
+  return normalized.length > 0 && normalized.every(quote=>source.includes(quote));
+}
+
 function fallbackRank(plan,items) {
   const needTokens = tokenSet([plan.goal,plan.intent,...plan.core_capabilities,...plan.constraints,...plan.queries].join(' '));
   const queryTokenSets = plan.queries.map(tokenSet).filter(tokens=>tokens.size);
@@ -203,7 +209,7 @@ async function rankAndDescribe(req,input,plan,items) {
   let result;
   try {
     result = await askModel(req,[
-      {role:'system',content:'你负责按用户真实任务筛选和排序 GitHub 仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"evidence_score":0,"quality_score":0,"title":"中文标题","summary":"中文说明","bullets":["能力证据"]}]}。只返回真正相关且 relevance_score>=60 的项目，不要为不相关候选返回占位项；full_name 必须来自输入且不得修改。第一优先级是核心需求匹配：项目的主要输入、输出和能力必须真正帮助完成用户目标，仅有相邻关键词不算匹配。relevance_score 表示需求匹配程度；evidence_score 表示 README、Description、Topics 对关键能力的证据充分度；quality_score 表示文档、维护、可体验性和项目完成度。Star 与活跃度只能辅助排序，不能掩盖不相关。title 要直接说明项目解决的问题或提供的能力；summary 用具体自然的中文说明实际问题、解决方案和值得关注的新意，不堆术语。不得声称资料没有明确提供的功能。对技术项目可以解释可能带来的产品价值，但必须使用“可用于”“可能帮助”等措辞区分推测与事实。bullets 最多 2 条，只写资料可核验的能力。'},
+      {role:'system',content:'你负责按用户真实任务筛选和排序 GitHub 仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"evidence_score":0,"quality_score":0,"title":"中文标题","summary":"中文说明","bullets":["能力证据"],"evidence_quotes":["从 Description、Topics 或 README 原样复制的短句"]}]}。只返回真正相关且 relevance_score>=60 的项目，不要为不相关候选返回占位项；full_name 必须来自输入且不得修改。每个入选项目必须给出 1-3 条 evidence_quotes，必须逐字复制输入资料中的原文、不得翻译或改写，并直接支持 summary 中的全部能力判断。缺少关键能力的明确证据就不要返回该项目；相邻能力不能替代用户要求，例如规划、测试或代码审查不能证明具备调用链追踪。第一优先级是核心需求匹配：项目的主要输入、输出和能力必须真正帮助完成用户目标，仅有相邻关键词不算匹配。relevance_score 表示需求匹配程度；evidence_score 表示资料对关键能力的证据充分度；quality_score 表示文档、维护、可体验性和项目完成度。Star 与活跃度只能辅助排序，不能掩盖不相关。title 要直接说明项目解决的问题或提供的能力；summary 用具体自然的中文说明实际问题、解决方案和值得关注的新意，不堆术语。不得声称资料没有明确提供的功能。对技术项目可以解释可能带来的产品价值，但必须使用“可用于”“可能帮助”等措辞区分推测与事实。bullets 最多 2 条，只写资料可核验的能力。'},
       {role:'user',content:JSON.stringify({request:input,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,constraints:plan.constraints},candidates})}
     ],4800);
   } catch {
@@ -216,10 +222,11 @@ async function rankAndDescribe(req,input,plan,items) {
     const relevance = Math.max(0,Math.min(100,Number(decision?.relevance_score || 0)));
     const evidence = Math.max(0,Math.min(100,Number(decision?.evidence_score || 0)));
     const quality = Math.max(0,Math.min(100,Number(decision?.quality_score || metadataQuality(item))));
-    if (!decision || decision.relevant === false || relevance < 60 || evidence < 35) return [];
+    const evidenceQuotes = unique(Array.isArray(decision?.evidence_quotes) ? decision.evidence_quotes : [],3);
+    if (!decision || decision.relevant === false || relevance < 60 || evidence < 35 || !evidenceSupported(item,evidenceQuotes)) return [];
     const rank = relevance * .72 + evidence * .12 + quality * .08 + activityScore(item) * .04 + popularityScore(item) * .04;
     const {readme_excerpt,...repo} = item;
-    return [{...repo,relevance_score:relevance,evidence_score:evidence,quality_score:quality,rank_score:rank,ai_title:clean(decision.title,60) || item.name,ai_summary:clean(decision.summary,180),ai_bullets:unique(Array.isArray(decision.bullets) ? decision.bullets : [],2)}];
+    return [{...repo,relevance_score:relevance,evidence_score:evidence,quality_score:quality,rank_score:rank,ai_title:clean(decision.title,60) || item.name,ai_summary:clean(decision.summary,180),ai_bullets:unique(Array.isArray(decision.bullets) ? decision.bullets : [],2),evidence_quotes:evidenceQuotes}];
   }).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
 }
 
@@ -280,4 +287,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,fallbackPlan,fallbackRank,listText,metadataQuality,popularityScore,tokenSet,unique};
+module.exports._test = {activityScore,evidenceSupported,fallbackPlan,fallbackRank,listText,metadataQuality,popularityScore,tokenSet,unique};
