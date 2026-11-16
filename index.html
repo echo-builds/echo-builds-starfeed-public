@@ -100,6 +100,7 @@ dialog::backdrop{background:#18161280}
 #details figure img{display:block;width:100%;max-height:390px;object-fit:contain;border-radius:10px;background:#f3f1ee}
 #details figcaption{font-size:11px;color:var(--muted);margin-top:4px}
 .actions{display:grid;grid-template-columns:1fr 1.08fr .72fr;gap:8px;padding-top:12px;border-top:1px solid var(--rule)}
+.actions.two{grid-template-columns:1fr 1fr}
 .actions>*{min-width:0;padding-inline:7px;text-align:center}
 .save-status{font-size:12px;color:var(--muted)}
 .auth-panel{padding:22px 20px 28px}
@@ -502,8 +503,9 @@ const experienceOf = repo => {
   if (download) return {url:download,label:repo.downloadLabel || '下载体验'};
   return null;
 };
-const detailReady = repo => Array.isArray(repo.authorSections) && repo.authorSections.some(item =>
-  item && ((item.paragraphs?.length || 0) + (item.bullets?.length || 0) > 0)) && experienceOf(repo);
+const detailReady = repo => validRepo(repo);
+const hasChinese = value => /[㐀-鿿]/.test(String(value || ''));
+const preparedCopy = repo => Boolean(notes[repoKey(repo)] || repo.ai_summary || hasChinese(repo.description));
 
 function getCuratedCatalog() {
   const products = new Map();
@@ -519,13 +521,14 @@ function discoveryResult(item) {
   if (prepared) return {...prepared,...item,published_at:prepared.published_at,feedResult:true};
   const repo = enrich({...shape(item),searchResult:true,feedResult:true,url:safeUrl(item.html_url) || `https://github.com/${item.full_name}`});
   const description = String(repo.description || '').trim();
-  const chineseDescription = /[㐀-鿿]/.test(description) ? description : '';
-  const summary = chineseDescription || `${repo.name} 是一个拥有 ${compact.format(repo.stargazers_count)} Star 的开源项目，点击可查看 GitHub 说明。`;
-  return {...repo,title:repo.name,summary,coverText:summary};
+  const chineseDescription = hasChinese(description) ? description : '';
+  const summary = repo.ai_summary || chineseDescription;
+  if (!summary) return null;
+  return {...repo,title:repo.ai_title || repo.name,summary,coverText:summary};
 }
 function getDiscoverCatalog() {
   if (!state.catalog.length) return getCuratedCatalog();
-  return state.catalog.map(discoveryResult);
+  return state.catalog.map(discoveryResult).filter(Boolean);
 }
 function getCatalog() {
   const products = new Map();
@@ -543,8 +546,8 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,license} = item;
-  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,license,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,license,ai_title,ai_summary,ai_bullets} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,license,ai_title,ai_summary,ai_bullets,approximate:false};
 }
 function credibleRepo(item) {
   const text = `${item.name || ''} ${item.description || ''}`;
@@ -595,6 +598,28 @@ function previousWindow(before) {
   const from = dateKey(new Date(end.getTime() - DISCOVERY_WINDOW_DAYS * DAY));
   return {from,to,next:from};
 }
+async function prepareDiscoveryCopy(items) {
+  const missing = items.filter(item=>!preparedCopy(item));
+  if (!missing.length) return items;
+  const controller = new AbortController();
+  const timeout = setTimeout(()=>controller.abort(),30000);
+  try {
+    const response = await fetch('/api/search',{
+      method:'POST',
+      headers:{'Content-Type':'application/json',Accept:'application/json'},
+      body:JSON.stringify({mode:'describe',items:missing}),
+      signal:controller.signal
+    });
+    if (!response.ok) return items;
+    const data = await response.json();
+    const prepared = new Map((Array.isArray(data?.items) ? data.items : []).map(item=>[repoKey(item),item]));
+    return items.map(item=>prepared.has(repoKey(item)) ? {...item,...prepared.get(repoKey(item))} : item);
+  } catch {
+    return items;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 async function loadDiscover({reset = false} = {}) {
   if (state.loadingMore || (state.discoveryDone && !reset)) return;
   state.loadingMore = true;
@@ -607,6 +632,7 @@ async function loadDiscover({reset = false} = {}) {
   sentinel.textContent = reset ? '正在获取最新项目…' : '正在加载更早的高星项目…';
   const current = reset ? [] : state.catalog;
   const currentKeys = new Set(current.map(repoKey));
+  const knownCopy = new Map(state.catalog.map(repo=>[repoKey(repo),repo]));
   let cursor = state.discoveryCursor || initialDiscoveryCursor();
   let incoming = [];
   try {
@@ -624,7 +650,11 @@ async function loadDiscover({reset = false} = {}) {
         if (names.has(name)) return false;
         names.add(name);
         return true;
-      }).map(shape).sort((a,b)=>Date.parse(b.created_at) - Date.parse(a.created_at) || b.stargazers_count - a.stargazers_count);
+      }).map(shape).map(repo=>{
+        const known = knownCopy.get(repoKey(repo));
+        return known ? {...repo,ai_title:known.ai_title,ai_summary:known.ai_summary,ai_bullets:known.ai_bullets} : repo;
+      }).sort((a,b)=>Date.parse(b.created_at) - Date.parse(a.created_at) || b.stargazers_count - a.stargazers_count);
+      incoming = (await prepareDiscoveryCopy(incoming)).filter(preparedCopy);
       cursor = window.next;
     }
     const merged = new Map(current.map(repo=>[repoKey(repo),repo]));
@@ -644,7 +674,7 @@ async function loadDiscover({reset = false} = {}) {
       const canAppend = !reset && state.view === 'discover' && !state.refreshError;
       if (!canAppend) render();
       else {
-        const additions = incoming.filter(repo=>!currentKeys.has(repoKey(repo))).map(repo=>card(discoveryResult(repo)));
+        const additions = incoming.filter(repo=>!currentKeys.has(repoKey(repo))).map(discoveryResult).filter(Boolean).map(card);
         const feed = $('#feed');
         feed.append(...additions);
         if (masonry) for (const item of additions) masonry.observe(item);
@@ -745,7 +775,7 @@ function searchResult(item, query) {
   const prepared = notes[repoKey(repo)];
   const aiCopy = item.ai_title || item.ai_summary ? {title:item.ai_title,summary:item.ai_summary} : null;
   const copy = prepared || aiCopy || searchChineseCopy(item,query);
-  return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:copy.summary,coverText:copy.summary};
+  return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:copy.summary,ai_bullets:item.ai_bullets || repo.ai_bullets,coverText:copy.summary};
 }
 async function searchGitHub(input) {
   const query = input.trim();
@@ -803,10 +833,8 @@ function card(repo) {
   fillCover(el.querySelector('.cover'),repo);
   const trigger = el.querySelector('.project');
   trigger.dataset.project = repoKey(repo);
-  if (repo.searchResult && !detailReady(repo)) {
-    trigger.setAttribute('aria-label',`${titleOf(repo)}，打开原 GitHub 仓库`);
-    trigger.addEventListener('click',()=>window.open(repo.url,'_blank','noopener,noreferrer'));
-  } else trigger.addEventListener('click',()=>openDetails(repo,trigger));
+  trigger.setAttribute('aria-label',`${titleOf(repo)}，查看项目详情`);
+  trigger.addEventListener('click',()=>openDetails(repo,trigger));
   return el;
 }
 function external(url,text,style='secondary') {
@@ -861,9 +889,10 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   const header = document.createElement('h2');
   header.id = 'detail-title';
   header.textContent = titleOf(repo);
-  const meta = paragraph('★ ' + (repo.approximate ? '约 ' : '') + exact.format(repo.stargazers_count),'detail-meta');
+  const meta = paragraph(`${repo.full_name} · ★ ${repo.approximate ? '约 ' : ''}${exact.format(repo.stargazers_count)}`,'detail-meta');
   details.replaceChildren(header,meta);
-  if (Array.isArray(repo.authorSections) && repo.authorSections.length) {
+  const hasEditorialSections = Array.isArray(repo.authorSections) && repo.authorSections.length;
+  if (hasEditorialSections) {
     for (const item of repo.authorSections) {
       const block = document.createElement('section');
       if (item.heading) {
@@ -883,6 +912,15 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
       }
       details.append(block);
     }
+  } else {
+    const summary = repo.summary || (hasChinese(repo.description) ? repo.description : '这个项目的中文介绍正在整理中。');
+    details.append(section('项目简介',summary));
+    if (Array.isArray(repo.ai_bullets) && repo.ai_bullets.length) details.append(section('主要能力',repo.ai_bullets));
+    const facts = [];
+    if (Number(repo.forks_count) > 0) facts.push(`${exact.format(repo.forks_count)} Fork`);
+    if (repo.license?.spdx_id && !['NOASSERTION','OTHER'].includes(repo.license.spdx_id)) facts.push(`${repo.license.spdx_id} 开源许可`);
+    if (repo.created_at) facts.push(`${displayDate(repo.created_at)} 创建`);
+    if (facts.length) details.append(section('项目信息',facts));
   }
   if (repo.cover) {
     const figure = document.createElement('figure');
@@ -900,7 +938,7 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   actions.className = 'actions';
   const experience = experienceOf(repo);
   actions.append(external(repo.url,'查看 GitHub'));
-  actions.append(external(experience.url,experience.label,'primary'));
+  if (experience) actions.append(external(experience.url,experience.label,'primary'));
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'secondary save';
@@ -927,6 +965,7 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
     }
   });
   actions.append(save);
+  if (!experience) actions.classList.add('two');
   const notice = paragraph('','save-status');
   notice.id = 'save-status';
   notice.setAttribute('role','status');
@@ -944,7 +983,7 @@ function openRouteDetail() {
   const key = wanted.toLowerCase();
   const repos = [...getCatalog(),...state.saved.values(),...state.search.items];
   const repo = repos.find(item=>repoKey(item) === key);
-  if (repo && detailReady(repo)) openDetails(repo,null,{pushRoute:false});
+  if (repo) openDetails(repo,null,{pushRoute:false});
 }
 function closeDetailRoute() {
   const url = new URL(location.href);
