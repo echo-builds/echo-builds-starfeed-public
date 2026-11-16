@@ -1198,3 +1198,79 @@ $('#auth-start').addEventListener('click',startGitHubLogin);
 $('#auth-sync').addEventListener('click',async()=>{ $('#auth-sync').textContent='同步中…'; try { await syncGitHubStars(); $('#auth-sync').textContent='同步完成'; } catch { $('#auth-sync').textContent='同步失败，请重试'; } });
 $('#local-import-yes').addEventListener('click',async()=>{
   const button = $('#local-import-yes');
+  button.disabled = true;
+  button.textContent = '同步中…';
+  try {
+    for (const repo of state.pendingLocal) await setGitHubStar(repo,true);
+    state.pendingLocal = [];
+    await syncGitHubStars({preserveLocal:false});
+  } catch {
+    button.textContent = '部分同步失败，请重试';
+  } finally { button.disabled = false; }
+});
+$('#local-import-no').addEventListener('click',()=>{
+  state.pendingLocal = [];
+  state.saved = new Map(state.remoteSaved);
+  storage.put('saved',[...state.saved.values()]);
+  renderAccount();
+  render();
+});
+$('#auth-logout').addEventListener('click',async()=>{
+  await fetch('/api/auth/logout',{method:'POST'}).catch(()=>{});
+  state.auth = null;
+  state.remoteSaved = new Map();
+  state.pendingLocal = [];
+  renderAccount();
+});
+renderAccount();
+$('#detail').addEventListener('close',()=>{
+  state.openRepo = null;
+  render();
+  const key = state.trigger?.dataset.project;
+  const restored = [...document.querySelectorAll('[data-project]')].find(node=>node.dataset.project === key);
+  restored?.focus({preventScroll:true});
+});
+window.addEventListener('popstate',openRouteDetail);
+document.addEventListener('visibilitychange',()=>{
+  if (!document.hidden && Date.now() - state.lastFetch > 10 * 60 * 1000) loadDiscover({reset:true});
+});
+let installPrompt = null;
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+function updateInstallButton() {
+  $('#install-app').hidden = standalone || (!installPrompt && !isIOS);
+}
+window.addEventListener('beforeinstallprompt',event=>{
+  event.preventDefault();
+  installPrompt = event;
+  updateInstallButton();
+});
+window.addEventListener('appinstalled',()=>{ installPrompt = null; $('#install-app').hidden = true; });
+$('#install-app').addEventListener('click',async()=>{
+  if (installPrompt) {
+    await installPrompt.prompt();
+    await installPrompt.userChoice.catch(()=>null);
+    installPrompt = null;
+    updateInstallButton();
+    return;
+  }
+  $('#install-copy').textContent = '在 Safari 底部点“分享”，再选择“添加到主屏幕”。之后可以像普通 App 一样从桌面打开。';
+  $('#install-confirm').hidden = true;
+  $('#install-dialog').showModal();
+});
+$('#install-dialog .close').addEventListener('click',()=>$('#install-dialog').close());
+$('#install-dialog').addEventListener('click',event=>{ if (clickedDialogBackdrop($('#install-dialog'),event)) $('#install-dialog').close(); });
+$('#install-confirm').addEventListener('click',()=>$('#install-app').click());
+updateInstallButton();
+if (location.protocol !== 'file:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
+document.querySelector('.brand span').textContent = 'RepoScroll';
+document.querySelector('.brand').setAttribute('aria-label','RepoScroll 首页');
+document.querySelector('.brand img').src = '/icons/icon-192.png';
+render();
+openRouteDetail();
+loadDiscover({reset:true});
+bootstrapAuth();
+
+</script>
+</body>
+</html>
