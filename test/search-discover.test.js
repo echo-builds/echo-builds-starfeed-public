@@ -275,3 +275,32 @@ test('离线中文介绍的准入校验要求原始 Description 可回查',()=>{
     title:'A meeting tool',summary:'Turns meeting notes into action items.',evidence:'meeting notes'
   },repo),false);
 });
+
+test('千问使用 Cloudflare Workers AI 免费路径，且不会自动调用付费网关',async()=>{
+  const freeAI = require('../api/_lib/free-ai');
+  const before = {
+    FREE_AI_PROVIDER:process.env.FREE_AI_PROVIDER,
+    CLOUDFLARE_ACCOUNT_ID:process.env.CLOUDFLARE_ACCOUNT_ID,
+    CLOUDFLARE_API_TOKEN:process.env.CLOUDFLARE_API_TOKEN,
+    ENABLE_FREE_GEMINI:process.env.ENABLE_FREE_GEMINI
+  };
+  try {
+    process.env.FREE_AI_PROVIDER='cloudflare-qwen';
+    delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    delete process.env.CLOUDFLARE_API_TOKEN;
+    assert.equal(freeAI.provider(),null);
+    await assert.rejects(
+      ()=>freeAI.generateJSON([{role:'user',content:'找开源工具'}]),
+      /free_ai_disabled/
+    );
+    process.env.CLOUDFLARE_ACCOUNT_ID='0123456789abcdef0123456789abcdef';
+    process.env.CLOUDFLARE_API_TOKEN='test-secret-not-real';
+    assert.equal(freeAI.provider(),'cloudflare-qwen');
+    assert.equal(freeAI.enabled(),true);
+  } finally {
+    for (const [key,value] of Object.entries(before)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key]=value;
+    }
+  }
+});
