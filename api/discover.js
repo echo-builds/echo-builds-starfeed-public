@@ -4,6 +4,7 @@ const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
 const DAY = 86400000;
+const VERIFIED_COPY = require('../data/featured-copy.json').entries;
 
 function dateKey(date) {
   return date.toISOString().slice(0,10);
@@ -266,6 +267,15 @@ async function classify(req,candidates) {
   }
 }
 
+
+function verifiedCachedCopy(repo) {
+  const item = VERIFIED_COPY[String(repo.full_name || '').toLowerCase()];
+  if (!item || !item.title || !item.summary || !item.evidence) return null;
+  // Invalidate edited or renamed repositories rather than reusing old claims.
+  const current = normalizeEvidenceText(repo.description || '');
+  return current && current.includes(normalizeEvidenceText(item.evidence)) ? item : null;
+}
+
 function freshnessScore(date,windowDays) {
   const age = Math.max(0,(Date.now() - Date.parse(date || 0)) / DAY);
   return Math.max(0,100 - age / Math.max(1,windowDays) * 100);
@@ -288,7 +298,8 @@ module.exports = async function handler(req,res) {
   const stored = getSession(req);
   // Discovery is identical for all visitors. Cache only anonymous responses,
   // never responses that may contain a refreshed GitHub session cookie.
-  res.setHeader('Cache-Control',stored ? 'private, no-store' : 'public, max-age=0, s-maxage=600, stale-while-revalidate=3600');
+  res.setHeader('Cache-Control',stored ? 'private, no-store' : 'public, max-age=0, must-revalidate');
+  if (!stored) res.setHeader('Vercel-CDN-Cache-Control','public, s-maxage=21600, stale-while-revalidate=86400');
   // Optional server-side read token avoids GitHub's 60-request/hour IP limit
   // for anonymous visitors; never expose it to the browser.
   let token = process.env.GITHUB_API_TOKEN || '';
@@ -331,11 +342,15 @@ module.exports = async function handler(req,res) {
       const readme = await githubText(`/repos/${item.repo.full_name}/readme`,token,item.repo.default_branch).catch(()=>'');
       return {...item,readme,cover:readmeImages(readme,item.repo)[0] || null};
     }));
-    const decisions = await classify(req,enriched);
+    // The browsing feed must remain free and predictable: never invoke an LLM
+    // on a normal page view. Offline/verified summaries are reused instead.
+    const liveAiEnabled = process.env.ENABLE_LIVE_DISCOVERY_AI === 'true';
+    const decisions = liveAiEnabled ? await classify(req,enriched) : new Map();
     const aiClassified = decisions.size > 0;
     let scored = enriched.flatMap(item=>{
       const key = item.repo.full_name.toLowerCase();
       const fallback = fallbackCopy(item.repo,item.kind,item.release,item.readme,item.cover);
+      const cached = verifiedCachedCopy(item.repo);
       const decision = aiClassified ? decisions.get(key) : fallback;
       if (!decision) return [];
       const decisionEvidence = aiClassified ? recommendationEvidenceSupported(item,decision.evidence_quotes) : true;
@@ -351,20 +366,20 @@ module.exports = async function handler(req,res) {
       return [{
         ...item.repo,
         cover:item.cover,
-        ai_title:decisionEvidence ? (clean(decision.title,60) || item.repo.name) : item.repo.name,
-        ai_summary:decisionEvidence ? (clean(decision.summary,180) || fallback.summary) : fallback.summary,
+        ai_title:aiClassified && decisionEvidence ? (clean(decision.title,60) || item.repo.name) : cached?.title || item.repo.name,
+        ai_summary:aiClassified && decisionEvidence ? (clean(decision.summary,180) || cached?.summary || fallback.summary) : cached?.summary || fallback.summary,
         selection_reason:item.kind === 'new' ? '近期高星新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,
         release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url,has_assets:Array.isArray(item.release.assets) && item.release.assets.length > 0} : null,
         attention_category:clean(decision.attention_category,40),
         attention_score:attention,
         quality_score:quality,
-        evidence_quotes:aiClassified && decisionEvidence ? uniqueText(decision.evidence_quotes) : [],
+        evidence_quotes:aiClassified && decisionEvidence ? uniqueText(decision.evidence_quotes) : cached ? [cached.evidence] : [],
         heat_score:heat,
         candidate_kind:item.kind
       }];
     });
 
-    let classifierMode = aiClassified ? 'ai' : 'fallback';
+    let classifierMode = aiClassified ? 'ai' : liveAiEnabled ? 'fallback' : 'verified_copy';
     // A truncated AI response should not leave the home feed almost empty.
     // Backfill only when there are fewer than eight accepted projects, using
     // direct AI/Agent/model signals in primary repository metadata. Never
@@ -388,8 +403,8 @@ module.exports = async function handler(req,res) {
         return [{
           ...item.repo,
           cover:item.cover,
-          ai_title:item.repo.name,
-          ai_summary:fallback.summary,
+          ai_title:verifiedCachedCopy(item.repo)?.title || item.repo.name,
+          ai_summary:verifiedCachedCopy(item.repo)?.summary || fallback.summary,
           selection_reason:item.kind === 'new' ? '近期高星新项目' : `近期发布 ${item.release?.tag_name || '新版本'}`,
           release:item.release ? {
             tag_name:item.release.tag_name,published_at:item.release.published_at,
@@ -399,7 +414,7 @@ module.exports = async function handler(req,res) {
           attention_category:fallback.attention_category,
           attention_score:fallback.attention_score,
           quality_score:fallback.quality_score,
-          evidence_quotes:[],
+          evidence_quotes:verifiedCachedCopy(item.repo) ? [verifiedCachedCopy(item.repo).evidence] : [],
           heat_score:heat,
           candidate_kind:item.kind
         }];
@@ -421,10 +436,10 @@ module.exports = async function handler(req,res) {
     }
     for (const item of items) delete item.candidate_kind;
 
-    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:classifierMode,diagnostics:{readme_fetched:enriched.filter(item=>item.readme.length>0).length,readme_candidates:enriched.length,ai_status:decisions.failure || (aiClassified?'ok':'empty_response'),ai_error_type:decisions.failure_type || null}});
+    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:classifierMode,diagnostics:{readme_fetched:enriched.filter(item=>item.readme.length>0).length,readme_candidates:enriched.length,ai_status:liveAiEnabled ? (decisions.failure || (aiClassified?'ok':'empty_response')) : 'disabled_live',ai_error_type:decisions.failure_type || null,cached_copy_count:items.filter(item=>verifiedCachedCopy(item)).length}});
   } catch (error) {
     return res.status(502).json({error:'discover_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
 };
 
-module.exports._test = {attentionSignal,normalizeEvidenceText,conservativeDecisionSupported,directAttentionSignal,fallbackCopy,fallbackSummary,isResourceCollection,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
+module.exports._test = {attentionSignal,verifiedCachedCopy,normalizeEvidenceText,conservativeDecisionSupported,directAttentionSignal,fallbackCopy,fallbackSummary,isResourceCollection,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
