@@ -90,6 +90,22 @@ function resolveImages(markdown,repo) {
     .replace(/(<img\b[^>]*\bsrc=["'])([^"']+)(["'])/gi,(all,start,url,end)=>start + (/^https?:\/\//i.test(url) ? url : base + url.replace(/^\.\//,'')) + end);
 }
 
+function publicUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+  } catch { return null; }
+}
+
+function projectLinks(repo,release) {
+  const links = [];
+  const homepage = publicUrl(repo.homepage);
+  if (homepage && !/github\.com$/i.test(new URL(homepage).hostname)) links.push({url:homepage,label:'产品主页'});
+  const releaseUrl = publicUrl(release?.html_url);
+  if (releaseUrl) links.push({url:releaseUrl,label:'下载最新版本'});
+  return links;
+}
+
 module.exports = async function handler(req,res) {
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Cache-Control','public, s-maxage=86400, stale-while-revalidate=604800');
@@ -108,11 +124,15 @@ module.exports = async function handler(req,res) {
   try {
     const repo = await github(`/repos/${fullName}`,token);
     if (repo.private || (repo.visibility && repo.visibility !== 'public')) return res.status(403).json({error:'public_repositories_only'});
-    const readme = await github(`/repos/${fullName}/readme`,token,'application/vnd.github.raw+json');
+    const [readme,release] = await Promise.all([
+      github(`/repos/${fullName}/readme`,token,'application/vnd.github.raw+json'),
+      github(`/repos/${fullName}/releases/latest`,token).catch(()=>null)
+    ]);
+    const links = projectLinks(repo,release);
     const selected = resolveImages(selectProductMarkdown(readme),repo);
-    if (!selected) return res.status(200).json({repo,readme_markdown:'',readme_url:`https://github.com/${fullName}#readme`});
+    if (!selected) return res.status(200).json({repo,links,readme_markdown:'',readme_url:`https://github.com/${fullName}#readme`});
     const translated = isMostlyChinese(selected) ? selected : await translate(req,selected);
-    return res.status(200).json({repo,readme_markdown:translated,readme_url:`https://github.com/${fullName}#readme`,translated:!isMostlyChinese(selected)});
+    return res.status(200).json({repo,links,readme_markdown:translated,readme_url:`https://github.com/${fullName}#readme`,translated:!isMostlyChinese(selected)});
   } catch (error) {
     return res.status(502).json({error:'project_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
