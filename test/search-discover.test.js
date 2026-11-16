@@ -257,3 +257,21 @@ test('首页预先核对的中文介绍只在原始证据仍存在时启用',()=
   assert.ok(valid?.summary?.length > 15);
   assert.equal(discover.verifiedCachedCopy({...repo,description:'Unrelated new project'}),null);
 });
+
+test('离线中文介绍的准入校验要求原始 Description 可回查',()=>{
+  const refresh=require('../scripts/refresh-featured-copy.cjs');
+  const repo={full_name:'owner/new-tool',description:'Open-source AI agent for turning meeting notes into action items'};
+  assert.equal(refresh.validCopy({
+    title:'把会议笔记整理为行动项',
+    summary:'将会议内容整理成行动项目，便于进一步跟踪任务和工作进度。',
+    evidence:'AI agent for turning meeting notes into action items'
+  },repo),true);
+  assert.equal(refresh.validCopy({
+    title:'自动跨平台管理所有会议',
+    summary:'支持所有平台和完整的语音视频录制、跨团队协作与永久免费。',
+    evidence:'record audio and video from any platform'
+  },repo),false);
+  assert.equal(refresh.validCopy({
+    title:'A meeting tool',summary:'Turns meeting notes into action items.',evidence:'meeting notes'
+  },repo),false);
+});
