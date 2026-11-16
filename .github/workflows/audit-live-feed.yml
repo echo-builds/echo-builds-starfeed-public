@@ -36,7 +36,7 @@ jobs:
           node --input-type=module <<'NODE'
           const url = "https://echo-builds-starfeed.vercel.app/api/discover?page=1";
           console.log("Checking:", url);
-          console.log("Read-only production audit on current deployment");
+          console.log("Checking free-first production discovery build");
           const response = await fetch(url, {
             headers: {Accept: "application/json", "User-Agent": "RepoScroll-Feed-Audit/1.0"},
             signal: AbortSignal.timeout(120000)
