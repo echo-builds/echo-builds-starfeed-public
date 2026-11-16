@@ -84,14 +84,41 @@ function resolveAsset(value,repo) {
 }
 
 function readmeImages(markdown,repo) {
+  const text = String(markdown || '');
   const found = [];
-  for (const match of String(markdown || '').matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g)) found.push(match[1]);
-  for (const match of String(markdown || '').matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) found.push(match[1]);
-  const filtered = [...new Set(found.map(value=>resolveAsset(value,repo)).filter(Boolean))].filter(url=>
-    !/shields\.io|badge|badgen|license|coverage|actions\/workflows|social|logo(?:\.|\/)|icon(?:\.|\/)|star-history|trendshift|avatars\.githubusercontent|github\.com\/.+\.svg/i.test(url) &&
-    !/\.svg(?:\?|$)/i.test(url) &&
-    /(screenshot|screen[-_.\/]|preview|demo|showcase|interface|ui[-_.\/]|app[-_.\/]|chat[-_.\/]|dashboard|workflow|hero|usage|example|product|cover|\.gif(?:\?|$))/i.test(url));
-  return filtered.sort((a,b)=>Number(/screenshot|preview|demo|showcase|interface|ui[-_.\/]/i.test(b))-Number(/screenshot|preview|demo|showcase|interface|ui[-_.\/]/i.test(a)));
+  function add(source,alt,position) {
+    const url = resolveAsset(source,repo);
+    if (!url) return;
+    let path = url;
+    try { path = decodeURIComponent(new URL(url).pathname); } catch {}
+    const alternative = String(alt || '').trim();
+    if (/shields\.io|badgen|badge|license|coverage|actions\/workflows|social|star-history|trendshift|avatars\.githubusercontent|api\.star-history|opencollective\.com\/.*avatar|\.svg(?:[?#]|$)/i.test(url)) return;
+    if (/(?:^|[\/_-])(?:logos?|icons?|avatars?|favicon|sponsors?)(?:[\/_.-]|$)/i.test(path) ||
+        /^(?:logo|icon|avatar|badge|build status|github stars?|github forks?|discord|sponsor)(?:\b|$)/i.test(alternative)) return;
+    if (!/\.(?:png|jpe?g|webp|gif|avif)(?:[?#]|$)|github\.com\/user-attachments\/assets\/|user-images\.githubusercontent\.com\//i.test(url)) return;
+    const hint = /screenshot|screen[-_.\/ ]|preview|demo|showcase|interface|dashboard|workflow|hero|usage|product|cover|app[-_.\/ ]|readme[_-]?if|截图|界面|演示|预览|效果图|产品展示/i;
+    const urlHint = hint.test(path);
+    const altHint = hint.test(alternative);
+    const nearby = text.slice(Math.max(0,position - 160),position).replace(/!\[[^\]]*\]\([^)]*\)/g,' ');
+    const contextHint = /(?:^|\n)\s{0,4}(?:#{1,5}\s*)?(?:screenshots?|demo|preview|showcase|product screenshots?|界面截图|产品演示|产品预览)\b/i.test(nearby);
+    if (!urlHint && !altHint && !contextHint) return;
+    const score = (urlHint ? 30 : 0) + (altHint ? 35 : 0) + (contextHint ? 12 : 0) +
+      (/\.gif(?:[?#]|$)/i.test(url) ? 5 : 0) + (position < 16000 ? 3 : 0);
+    found.push({url,score,position});
+  }
+  for (const match of text.matchAll(/!\[([^\]]*)\]\((?:<([^>]+)>|([^\s)]+))(?:\s+["'][^"']*["'])?\)/g))
+    add(match[2] || match[3],match[1],match.index);
+  for (const match of text.matchAll(/<img\b[^>]*>/gi)) {
+    const src = match[0].match(/\bsrc\s*=\s*(["'])(.*?)\1/i);
+    const alt = match[0].match(/\balt\s*=\s*(["'])(.*?)\1/i);
+    if (src) add(src[2],alt?.[2] || '',match.index);
+  }
+  const unique = new Map();
+  for (const item of found) {
+    const previous = unique.get(item.url);
+    if (!previous || item.score > previous.score) unique.set(item.url,item);
+  }
+  return [...unique.values()].sort((a,b)=>b.score-a.score || a.position-b.position).map(item=>item.url);
 }
 
 function attentionSignal(repo,readme = '') {
