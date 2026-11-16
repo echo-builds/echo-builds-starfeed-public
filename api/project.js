@@ -97,13 +97,18 @@ function publicUrl(value) {
   } catch { return null; }
 }
 
-function projectLinks(repo,release) {
-  const links = [];
+function productExperience(repo,release) {
   const homepage = publicUrl(repo.homepage);
-  if (homepage && !/github\.com$/i.test(new URL(homepage).hostname)) links.push({url:homepage,label:'产品主页'});
   const releaseUrl = publicUrl(release?.html_url);
-  if (releaseUrl) links.push({url:releaseUrl,label:'下载最新版本'});
-  return links;
+  const hasAssets = Array.isArray(release?.assets) && release.assets.some(asset=>publicUrl(asset?.browser_download_url));
+  const homepageUrl = homepage ? new URL(homepage) : null;
+  const isGitHub = homepageUrl && /(^|\.)github\.com$/i.test(homepageUrl.hostname);
+  const looksLikeDocs = homepage && /(^docs\.|readthedocs|\/docs(?:\/|$))/i.test(homepage);
+  const looksLikeLiveApp = homepageUrl && (/^(app|demo|try|play)\./i.test(homepageUrl.hostname) || /(vercel\.app|netlify\.app|github\.io|hf\.space)$/i.test(homepageUrl.hostname) || /huggingface\.co\/spaces\//i.test(homepageUrl.hostname + homepageUrl.pathname));
+  if (homepage && !isGitHub && looksLikeLiveApp) return {url:homepage,mode:'online'};
+  if (releaseUrl && hasAssets) return {url:releaseUrl,mode:'download'};
+  if (homepage && !isGitHub && !looksLikeDocs) return {url:homepage,mode:'online'};
+  return null;
 }
 
 module.exports = async function handler(req,res) {
@@ -128,11 +133,11 @@ module.exports = async function handler(req,res) {
       github(`/repos/${fullName}/readme`,token,'application/vnd.github.raw+json'),
       github(`/repos/${fullName}/releases/latest`,token).catch(()=>null)
     ]);
-    const links = projectLinks(repo,release);
+    const experience = productExperience(repo,release);
     const selected = resolveImages(selectProductMarkdown(readme),repo);
-    if (!selected) return res.status(200).json({repo,links,readme_markdown:'',readme_url:`https://github.com/${fullName}#readme`});
+    if (!selected) return res.status(200).json({repo,experience,readme_markdown:'',readme_url:`https://github.com/${fullName}#readme`});
     const translated = isMostlyChinese(selected) ? selected : await translate(req,selected);
-    return res.status(200).json({repo,links,readme_markdown:translated,readme_url:`https://github.com/${fullName}#readme`,translated:!isMostlyChinese(selected)});
+    return res.status(200).json({repo,experience,readme_markdown:translated,readme_url:`https://github.com/${fullName}#readme`,translated:!isMostlyChinese(selected)});
   } catch (error) {
     return res.status(502).json({error:'project_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
