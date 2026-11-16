@@ -146,12 +146,14 @@ function fallbackRank(input,items) {
   const wantsTts = isTtsRequest(input);
   return items.flatMap(item=>{
     const text = `${item.full_name} ${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`.toLowerCase();
+    const primary = `${item.name || ''} ${(item.topics || []).join(' ')}`.toLowerCase();
     let relevance = 58;
     if (wantsTts) {
       const matches = /text[- ]to[- ]speech|speech synthesis|\btts\b|voice clon|dubbing|audio generation|fish.?speech|indextts|qwen.*tts|moss.?tts/.test(text);
+      const primaryMatch = /tts|text.?to.?speech|speech|voice|dubb|audio.?book/.test(primary);
       const wrongDirection = /speech[- ]to[- ]text|transcrib|automatic speech recognition|\basr\b/.test(text) && !matches;
       const supportsChinese = /chinese|mandarin|中文|multilingual/.test(text);
-      if (!matches || wrongDirection || (/中文/.test(input) && !supportsChinese)) return [];
+      if (!matches || !primaryMatch || wrongDirection || (/中文/.test(input) && !supportsChinese)) return [];
       relevance = 76 + (supportsChinese ? 8 : 0) + (/expressive|emotion|prosody|pause|natural|multi.?speaker|voice clon|demo/.test(text) ? 7 : 0);
     }
     const evidence = wantsTts ? (/chinese|mandarin|中文/.test(text) ? 5 : 0) + (/expressive|emotion|prosody|pause|duration control|instruction/.test(text) ? 7 : 0) + (/multi.?speaker|dialogue|podcast/.test(text) ? 5 : 0) + (/demo|audio sample|试听/.test(text) ? 3 : 0) : 0;
@@ -242,10 +244,14 @@ module.exports = async function handler(req,res) {
     const plan = await planSearch(req,input);
     const batches = await Promise.allSettled(plan.queries.map(query=>githubSearch(query,token)));
     const merged = new Map();
+    const diversified = new Map();
     for (const batch of batches) if (batch.status === 'fulfilled') {
       for (const item of batch.value) if (item?.full_name && !item.archived && !item.fork) merged.set(item.full_name.toLowerCase(),shape(item));
+      for (const item of batch.value.slice(0,12)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
     }
-    let items = [...merged.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,40);
+    const remainder = [...merged.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
+    for (const item of remainder) if (diversified.size < 48) diversified.set(item.full_name.toLowerCase(),item);
+    let items = [...diversified.values()].slice(0,48);
     if (!items.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     items = await rankAndDescribe(req,input,await withReadmes(items));
     return res.status(200).json({mode:plan.mode,intent:plan.intent,queries:plan.queries,diagnostic:plan.aiFallbackReason || null,items});
