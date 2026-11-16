@@ -284,20 +284,33 @@ function requestEvidenceSupported(input,quotes) {
   return matched >= 2 && matched / request.size >= .16;
 }
 
-function capabilityClaimsSupported(item,requiredNames,claims) {
-  const required = unique(Array.isArray(requiredNames) ? requiredNames : [],8).map(name=>name.toLowerCase());
+function quoteMatchesCheck(quote,check) {
+  const terms = Array.isArray(check?.evidence_terms) ? check.evidence_terms : [];
+  if (!terms.length) return true;
+  const source = new Set([...tokenSet(quote)].map(stemToken));
+  return terms.some(term=>{
+    const tokens = [...tokenSet(term)].map(stemToken);
+    if (!tokens.length) return false;
+    const matched = tokens.filter(token=>source.has(token)).length;
+    return matched >= Math.max(1,Math.ceil(tokens.length * .66));
+  });
+}
+
+function capabilityClaimsSupported(item,requiredValues,claims) {
+  const required = (Array.isArray(requiredValues) ? requiredValues : []).map(value=>typeof value === 'string' ? {name:value,evidence_terms:[]} : value).filter(value=>value?.name).slice(0,8);
   if (!required.length) return true;
   const entries = (Array.isArray(claims) ? claims : []).map(claim=>({
     capability:clean(claim?.capability,100).toLowerCase(),
     quote:clean(claim?.evidence_quote ?? claim?.quote,220)
   })).filter(claim=>claim.capability && claim.quote);
-  return required.every((name,index)=>{
+  return required.every((check,index)=>{
+    const name = clean(check.name,100).toLowerCase();
     const nameTokens = tokenSet(name);
     const claim = entries.find(entry=>entry.capability === name) || entries.find(entry=>{
       const claimTokens = tokenSet(entry.capability);
       return [...nameTokens].some(token=>claimTokens.has(token));
     }) || (entries.length === required.length ? entries[index] : null);
-    return Boolean(claim && evidenceSupported(item,[claim.quote]));
+    return Boolean(claim && evidenceSupported(item,[claim.quote]) && quoteMatchesCheck(claim.quote,check));
   });
 }
 
@@ -367,7 +380,8 @@ async function rankAndDescribe(req,input,plan,items) {
     const evidenceQuotes = unique(Array.isArray(decision?.evidence_quotes) ? decision.evidence_quotes : [],3);
     const capabilityEvidence = Array.isArray(decision?.capability_evidence) ? decision.capability_evidence : [];
     const fallbackEvidence = plan.mode !== 'fallback' || requestEvidenceSupported(input,evidenceQuotes);
-    if (!decision || decision.relevant === false || relevance < 60 || evidence < 35 || !evidenceSupported(item,evidenceQuotes) || !capabilityClaimsSupported(item,plan.core_capabilities,capabilityEvidence) || !fallbackEvidence) return [];
+    const requiredChecks = Array.isArray(plan.capability_checks) && plan.capability_checks.length ? plan.capability_checks : plan.core_capabilities;
+    if (!decision || decision.relevant === false || relevance < 60 || evidence < 35 || !evidenceSupported(item,evidenceQuotes) || !capabilityClaimsSupported(item,requiredChecks,capabilityEvidence) || !fallbackEvidence) return [];
     const rank = relevance * .72 + evidence * .12 + quality * .08 + activityScore(item) * .04 + popularityScore(item) * .04;
     const {readme_excerpt,...repo} = item;
     return [{...repo,relevance_score:relevance,evidence_score:evidence,quality_score:quality,rank_score:rank,ai_title:clean(decision.title,60) || item.name,ai_summary:clean(decision.summary,180),ai_bullets:unique(Array.isArray(decision.bullets) ? decision.bullets : [],2),evidence_quotes:evidenceQuotes}];
@@ -438,4 +452,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,isCollectionCandidate,listText,meaningUnits,metadataQuality,popularityScore,requestEvidenceSupported,selectReadmeExcerpt,stemToken,tokenSet,unique,wantsCollection};
+module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,isCollectionCandidate,listText,meaningUnits,metadataQuality,popularityScore,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,tokenSet,unique,wantsCollection};
