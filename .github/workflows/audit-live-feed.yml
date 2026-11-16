@@ -6,6 +6,10 @@ on:
     branches: [main]
     paths:
       - .github/workflows/audit-live-feed.yml
+      - index.html
+      - api/project.js
+      - api/github/stars.js
+      - test/**
 
 permissions:
   contents: read
