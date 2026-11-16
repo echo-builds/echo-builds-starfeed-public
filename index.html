@@ -156,7 +156,7 @@ dialog::backdrop{background:#18161280}
   <main>
     <section class="heading">
       <h1 id="heading">推荐</h1>
-      <p id="lede">发现近期快速获得关注，或刚完成重要迭代的高质量 GitHub 项目</p>
+      <p id="lede">发现近期新创建或刚完成重要迭代的高星项目，聚焦与 AI 产品经理息息相关的产品与工具</p>
     </section>
     <p id="status" class="status" role="status" hidden></p>
     <section id="feed" class="feed" aria-label="项目"></section>
@@ -819,11 +819,7 @@ function card(repo) {
   const el = $('#card-template').content.firstElementChild.cloneNode(true);
   el.querySelector('h2').textContent = titleOf(repo);
   el.querySelector('.stars').textContent = '★ ' + (repo.approximate ? '约 ' : '') + compact.format(repo.stargazers_count);
-  const date = el.querySelector('.published');
-  const shownDate = repo.feedResult ? repo.created_at : repo.published_at || (repo.searchResult ? repo.updated_at : repo.created_at);
-  date.textContent = repo.selection_reason || (shownDate ? displayDate(shownDate) : '日期暂缺');
-  date.setAttribute('aria-label',repo.selection_reason || dateLabel(repo));
-  date.title = repo.selection_reason || dateLabel(repo);
+  el.querySelector('.published').remove();
   fillCover(el.querySelector('.cover'),repo);
   const trigger = el.querySelector('.project');
   trigger.dataset.project = repoKey(repo);
@@ -1058,7 +1054,7 @@ function render() {
   const headingWrap = document.querySelector('.heading');
   headingWrap.classList.toggle('discover-heading',!savedView && !searchView);
   $('#heading').textContent = savedView ? '收藏' : searchView ? '搜索结果' : '';
-  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? `“${state.search.query}”` : '发现近期快速获得关注，或刚完成重要迭代的高质量 GitHub 项目';
+  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? `“${state.search.query}”` : '发现近期新创建或刚完成重要迭代的高星项目，聚焦与 AI 产品经理息息相关的产品与工具';
   $('#search-dock').hidden = savedView;
   for (const tab of document.querySelectorAll('[data-view]')) {
     if (tab.dataset.view === state.view || (searchView && tab.dataset.view === 'discover')) tab.setAttribute('aria-current','page'); else tab.removeAttribute('aria-current');
