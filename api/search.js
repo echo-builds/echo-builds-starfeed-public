@@ -3,7 +3,7 @@ const {getSession,refreshSession,setSession} = require('./_lib/session');
 const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
-const TTS_QUERIES = ['TTS','Chinese TTS','multi-speaker TTS','text-to-speech','speech synthesis'];
+const TTS_QUERIES = ['TTS','Chinese TTS','multi-speaker TTS','text-to-speech','speech'];
 
 function isTtsRequest(input) {
   return /配音|语音合成|文字转语音|文本转语音|text.?to.?speech|\btts\b/i.test(input);
@@ -250,6 +250,12 @@ module.exports = async function handler(req,res) {
       for (const item of batch.value.slice(0,8)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
     }
     const remainder = [...merged.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
+    if (isTtsRequest(input)) {
+      for (const item of remainder) {
+        const primary = `${item.name || ''} ${(item.topics || []).join(' ')}`.toLowerCase();
+        if (diversified.size < 56 && /tts|speech|voice|dubb|audio.?book/.test(primary)) diversified.set(item.full_name.toLowerCase(),item);
+      }
+    }
     for (const item of remainder) if (diversified.size < 56) diversified.set(item.full_name.toLowerCase(),item);
     let items = [...diversified.values()].slice(0,56);
     if (!items.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
