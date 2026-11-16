@@ -1,8 +1,6 @@
 const {getSession,refreshSession,setSession} = require('./_lib/session');
 
 const GITHUB_API = 'https://api.github.com';
-const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
-const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
 const MAX_CANDIDATES = 24;
 
 function jsonFrom(text) {
@@ -17,30 +15,9 @@ function clean(value,limit = 240) {
   return String(value || '').replace(/[\r\n]+/g,' ').replace(/\s+/g,' ').trim().slice(0,limit);
 }
 
-function aiToken(req) {
-  return process.env.AI_GATEWAY_API_KEY || req.headers['x-vercel-oidc-token'] || process.env.VERCEL_OIDC_TOKEN || '';
-}
-
-async function askModel(req,messages,maxTokens = 1200) {
-  const token = aiToken(req);
-  if (!token) throw new Error('ai_unavailable');
-  let response;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    response = await fetch(GATEWAY_API,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-      body:JSON.stringify({model:SEARCH_MODEL,reasoning:{effort:'none'},temperature:0.1,max_tokens:maxTokens,messages}),
-      signal:AbortSignal.timeout(25000)
-    });
-    if (response.ok || ![429,502,503,504].includes(response.status) || attempt === 3) break;
-    const retryAfter = Math.min(7000,Math.max(1500,Number(response.headers.get('retry-after') || attempt + 1) * 1000));
-    await new Promise(resolve=>setTimeout(resolve,retryAfter));
-  }
-  if (!response.ok) throw new Error('ai_gateway_' + response.status);
-  const data = await response.json();
-  const parsed = jsonFrom(data?.choices?.[0]?.message?.content);
-  if (!parsed) throw new Error('invalid_ai_response');
-  return parsed;
+const freeAI = require('./_lib/free-ai');
+async function askModel(req,messages,maxTokens=1200) {
+  return freeAI.generateJSON(messages,{maxTokens});
 }
 
 function listText(value) {
