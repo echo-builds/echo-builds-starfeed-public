@@ -89,15 +89,23 @@ function readmeImages(markdown,repo) {
   for (const match of markdown.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g)) found.push(match[1]);
   for (const match of markdown.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) found.push(match[1]);
   const filtered = [...new Set(found.map(value=>resolveAsset(value,repo)).filter(Boolean))].filter(url=>
-    !/shields\.io|badge|badgen|license|coverage|actions\/workflows|social|logo(?:\.|\/)|icon(?:\.|\/)/i.test(url));
+    !/shields\.io|badge|badgen|license|coverage|actions\/workflows|social|logo(?:\.|\/)|icon(?:\.|\/)|star-history|trendshift|avatars\.githubusercontent|github\.com\/.+\.svg/i.test(url) &&
+    !/\.svg(?:\?|$)/i.test(url));
   return filtered.sort((a,b)=>Number(/screenshot|preview|demo|showcase|interface|ui[-_.\/]/i.test(b))-Number(/screenshot|preview|demo|showcase|interface|ui[-_.\/]/i.test(a)));
 }
 
 function fallbackRelevant(repo,readme) {
-  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')} ${readme.slice(0,3500)}`.toLowerCase();
+  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')}`.toLowerCase();
   const relevant = /(artificial intelligence|\bai\b|llm|agent|mcp|rag|prompt|model|copilot|workflow|automation|productivity|design|prototype|research|meeting|note|transcri|voice|audio|video|education|analytics|search|knowledge|developer tool)/i.test(text);
   const excluded = /(rom hack|jailbreak|cheat|trainer|keygen|skin swapper|mario kart|nintendo switch|game recomp|systemhelper|mobilegestalt)/i.test(text) && !/(\bai\b|agent|llm|model)/i.test(text);
   return relevant && !excluded;
+}
+
+function likelyRelevant(repo) {
+  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')}`.toLowerCase();
+  const strong = /(artificial intelligence|\bai\b|llm|agent|mcp|rag|prompt|deepseek|claude|openai|gemini|copilot|workflow automation|speech|transcri|voice cloning|video generation|research assistant|design tool|prototype|meeting note)/i.test(text);
+  const excluded = /(rom hack|jailbreak|cheat|trainer|keygen|skin swapper|mario kart|nintendo switch|game recomp|systemhelper|mobilegestalt)/i.test(text) && !/(\bai\b|agent|llm|model)/i.test(text);
+  return strong && !excluded;
 }
 
 function fallbackCopy(repo,kind,release) {
@@ -115,7 +123,7 @@ async function classify(req,candidates) {
   const payload = candidates.map(({repo,kind,release,readme,cover})=>({
     full_name:repo.full_name,description:repo.description,topics:repo.topics,stars:repo.stargazers_count,forks:repo.forks_count,
     created_at:repo.created_at,latest_release:release ? {tag:release.tag_name,published_at:release.published_at,name:release.name} : null,
-    has_product_image:Boolean(cover),homepage:repo.homepage,readme_excerpt:readme.slice(0,1800)
+    has_product_image:Boolean(cover),homepage:repo.homepage,readme_excerpt:readme.slice(0,750)
   }));
   try {
     const result = await askModel(req,[
@@ -128,7 +136,7 @@ async function classify(req,candidates) {
 
 module.exports = async function handler(req,res) {
   res.setHeader('X-Content-Type-Options','nosniff');
-  res.setHeader('Cache-Control','public, s-maxage=1800, stale-while-revalidate=43200');
+  res.setHeader('Cache-Control','public, s-maxage=300, stale-while-revalidate=3600');
   if (req.method !== 'GET') return res.status(405).json({error:'method_not_allowed'});
   const page = Math.min(5,Math.max(1,Number(req.query?.page || 1)));
   let token = '';
@@ -151,15 +159,15 @@ module.exports = async function handler(req,res) {
       search(`is:public archived:false fork:false stars:>=5000 pushed:>=${activeSince}`,token,page)
     ]);
 
-    const newRepos = newRaw.filter(item=>!item.archived && !item.fork).slice(0,18).map(item=>({repo:shape(item),kind:'new',release:null}));
-    const oldPool = activeRaw.filter(item=>Date.parse(item.created_at) < now - 90 * DAY && !item.archived && !item.fork).slice(0,16);
+    const newRepos = newRaw.filter(item=>!item.archived && !item.fork && likelyRelevant(item)).slice(0,14).map(item=>({repo:shape(item),kind:'new',release:null}));
+    const oldPool = activeRaw.filter(item=>Date.parse(item.created_at) < now - 90 * DAY && !item.archived && !item.fork && likelyRelevant(item)).slice(0,12);
     const oldWithRelease = (await Promise.all(oldPool.map(async item=>({
       repo:shape(item),kind:'release',release:await githubJson(`/repos/${item.full_name}/releases/latest`,token).catch(()=>null)
     })))).filter(item=>item.release?.published_at && Date.parse(item.release.published_at) >= releaseSince);
 
     const merged = new Map();
     for (const item of [...newRepos,...oldWithRelease]) merged.set(item.repo.full_name.toLowerCase(),item);
-    const base = [...merged.values()].slice(0,28);
+    const base = [...merged.values()].slice(0,18);
     const enriched = await Promise.all(base.map(async item=>{
       const readme = await githubText(`/repos/${item.repo.full_name}/readme`,token).catch(()=>'');
       return {...item,readme,cover:readmeImages(readme,item.repo)[0] || null};
@@ -169,7 +177,7 @@ module.exports = async function handler(req,res) {
       const key = item.repo.full_name.toLowerCase();
       const hasDecision = decisions.has(key);
       const decision = decisions.get(key) || fallbackCopy(item.repo,item.kind,item.release);
-      const relevant = hasDecision ? decision.relevant !== false && Number(decision.quality_score || 0) >= 58 : fallbackRelevant(item.repo,item.readme) && /[㐀-鿿]/.test(String(item.repo.description || ''));
+      const relevant = hasDecision ? decision.relevant !== false && Number(decision.quality_score || 0) >= 62 : fallbackRelevant(item.repo,item.readme) && /[㐀-鿿]/.test(String(item.repo.description || ''));
       if (!relevant) return [];
       const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
       const freshness = Math.max(0,90 - Math.max(0,(now - Date.parse(freshnessDate || 0)) / DAY));
@@ -177,7 +185,7 @@ module.exports = async function handler(req,res) {
       return [{...item.repo,cover:item.cover,ai_title:clean(decision.title,60) || item.repo.name,ai_summary:clean(decision.summary,180) || clean(item.repo.description,180),selection_reason:clean(decision.selection_reason,48) || (item.kind === 'new' ? '近期新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`),release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name} : null,quality_score:Number(decision.quality_score || 0),heat_score:heat}];
     }).sort((a,b)=>b.heat_score-a.heat_score).slice(0,24);
 
-    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'new_or_recent_release'});
+    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'new_or_recent_release',classifier:decisions.size ? 'ai' : 'fallback'});
   } catch (error) {
     return res.status(502).json({error:'discover_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
