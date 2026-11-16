@@ -253,6 +253,6 @@ test('首页预先核对的中文介绍只在原始证据仍存在时启用',()=
     description:'Build Agentic workflows, RAG pipelines, with rich AI model and tool support on one collaborative workspace.'
   };
   const valid=discover.verifiedCachedCopy(repo);
-  assert.ok(valid?.summary?.includes('Agent'));
+  assert.ok(valid?.summary?.includes('工作流'));
   assert.equal(discover.verifiedCachedCopy({...repo,description:'Unrelated new project'}),null);
 });
