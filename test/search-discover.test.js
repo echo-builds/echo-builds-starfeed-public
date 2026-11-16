@@ -52,6 +52,16 @@ test('候选必须逐项命中核心能力的可核验术语',()=>{
   assert.equal(search.capabilityEvidenceSupported(incomplete,checks),false);
 });
 
+test('排序结果必须为每项核心能力提供可回查证据',()=>{
+  const item = {description:'Agent evaluation platform with tool call tracing',topics:['observability'],readme_excerpt:'Trace every tool call and compare agent evaluations.'};
+  const claims = [
+    {capability:'Agent 可靠性评测',evidence_quote:'compare agent evaluations'},
+    {capability:'工具调用追踪',evidence_quote:'Trace every tool call'}
+  ];
+  assert.equal(search.capabilityClaimsSupported(item,['Agent 可靠性评测','工具调用追踪'],claims),true);
+  assert.equal(search.capabilityClaimsSupported(item,['Agent 可靠性评测','工具调用追踪'],claims.slice(0,1)),false);
+});
+
 test('通用排序把匹配证据放在纯 Star 之前',()=>{
   const plan = {goal:'agent evaluation tracing',intent:'评测 Agent 并追踪调用',core_capabilities:['evaluation','tracing'],constraints:[],queries:['agent evaluation tracing']};
   const items = [
