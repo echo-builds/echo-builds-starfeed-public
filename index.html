@@ -641,7 +641,8 @@ async function loadDiscover({reset = false} = {}) {
   }
   const sentinel = $('#feed-sentinel');
   sentinel.textContent = reset ? '正在筛选近期高质量项目…' : '正在加载更早收录的项目…';
-  const current = reset ? [] : state.catalog;
+  const baseline = state.catalog.length >= 8 ? state.catalog : getCuratedCatalog();
+  const current = reset ? baseline : state.catalog;
   const currentKeys = new Set(current.map(repoKey));
   const cursor = Number(state.discoveryCursor || 1);
   let incoming = [];
@@ -650,8 +651,10 @@ async function loadDiscover({reset = false} = {}) {
     if (!response.ok) throw new Error('Discover HTTP ' + response.status);
     const data = await response.json();
     incoming = (Array.isArray(data?.items) ? data.items : []).map(shape).filter(preparedCopy);
-    const merged = new Map(current.map(repo=>[repoKey(repo),repo]));
+    const replaceExisting = reset && incoming.length >= 8;
+    const merged = new Map();
     for (const repo of incoming) merged.set(repoKey(repo),repo);
+    if (!replaceExisting) for (const repo of current) if (!merged.has(repoKey(repo))) merged.set(repoKey(repo),repo);
     state.catalog = [...merged.values()];
     state.discoveryCursor = Number(data.next_page || cursor + 1);
     state.discoveryDone = data.has_more === false || incoming.length === 0;
