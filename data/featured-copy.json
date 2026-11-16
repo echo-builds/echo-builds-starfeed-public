@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "description": "Verified Chinese product explanations; each entry is valid only when its evidence appears in the current repository description.",
+  "entries": {
+    "juneyaooo/rea-video": {
+      "title": "逐镜头拆解视频是怎么制作的",
+      "summary": "按镜头分析一段视频是实拍、AI 生成还是代码制作，并记录可能的复刻方式。",
+      "evidence": "Reverse-engineer any video, shot by shot"
+    },
+    "heydamir/unslop": {
+      "title": "把 AI 生成的界面改得更有设计感",
+      "summary": "一个 Claude Skill，用于改进氛围编程生成的界面，减少常见的 AI 模板风格。",
+      "evidence": "A Claude skill that turns vibecoded"
+    },
+    "deepseek-ai/dsh-superagent-prototype": {
+      "title": "探索更自主的 Agent 系统",
+      "summary": "一个面向更高自主性的 Agent 系统原型；具体功能和成熟度仍需查看项目文档。",
+      "evidence": "Towards a More Autonomous Agent System"
+    },
+    "yetone/magpie": {
+      "title": "在菜单栏统一切换 AI 编程工具的模型",
+      "summary": "集中管理不同 Agent 的模型选择，例如让 Codex 使用 DeepSeek、让 Claude Code 使用 Kimi。",
+      "evidence": "Every agent's model. One place."
+    },
+    "ccch1mneyyy/dsh-go": {
+      "title": "在手机上运行 Agent，或遥控电脑上的 Agent",
+      "summary": "把 Agent 交互带到手机端，支持手机本地运行与远程操作电脑上的助手。",
+      "evidence": "手机本机运行，也能遥控你的电脑"
+    },
+    "wheresryan22/anatomy": {
+      "title": "让 Agent 生成可交互的复杂设备结构图",
+      "summary": "用于生成真实机械与复杂系统的等距插画，支持 SVG，并可选择 WebGL 三维效果。",
+      "evidence": "An agent skill for creating detailed, interactive isometric illustrations"
+    },
+    "lemomo-ai/lemo-opuscar": {
+      "title": "用 Claude Code 生成不同风格的短片",
+      "summary": "提供 99 种以代码制作影片的风格，每种包含风格提示词和演示影片，不依赖视频生成模型。",
+      "evidence": "99 ready to use"
+    },
+    "ebony-vinyl/dsh-our-free-model": {
+      "title": "为 dsh 增加免填 API Key 的模型入口",
+      "summary": "项目宣称安装插件后无需注册或填写 API Key 即可使用多种模型；免费和用量限制需自行核实。",
+      "evidence": "no login, no sign-up, no API key"
+    },
+    "google/elephant-goldfish-model": {
+      "title": "用 Agent 辅助软件设计和评审",
+      "summary": "一个开源插件，探索使用 Agent 参与软件设计与评审的工作流程。",
+      "evidence": "Open-source plugin for designing and reviewing software with agents"
+    },
+    "rehan-remade/universal-modder": {
+      "title": "让 Claude Code 帮助修改电脑游戏",
+      "summary": "提供技能、工具和 MCP 接口，辅助分析游戏、生成素材、修改内容并在游戏内测试。",
+      "evidence": "Point Claude at any game"
+    },
+    "kkkkhazix/aihot": {
+      "title": "自己搭建抓热点、写日报的信息站",
+      "summary": "一个可替换信源和精选标准的热点信息网站框架，用于自动整理行业资讯与日报。",
+      "evidence": "一个自己找热点、自己写日报的网站框架"
+    },
+    "zagitta/gpu-unlock": {
+      "title": "尝试提升部分 GeForce 显卡的 AI 计算吞吐",
+      "summary": "项目声称可改善部分显卡的 FP16、BF16、TF32 运算吞吐；实际收益需要按硬件环境验证。",
+      "evidence": "Up to 2× FP16 / BF16 / TF32 tensor throughput"
+    },
+    "ryze-ai-adgent/open-seo-mcp-skills": {
+      "title": "用 MCP 与 Skill 做 SEO 和 AI 搜索可见性分析",
+      "summary": "提供 SEO/GEO 相关的 MCP 接口及 Skill，覆盖关键词研究、排名追踪、网站审计和搜索可见性。",
+      "evidence": "Free SEO MCP server + open-source SEO and GEO skills"
+    },
+    "jub0t/concat": {
+      "title": "可以通过 MCP 自动操作的本地视频编辑器",
+      "summary": "一个本地优先的跨平台开源视频编辑器，提供 JSON-RPC API 和 MCP 供自动化流程调用。",
+      "evidence": "local-first, cross-platform video editor"
+    },
+    "langgenius/dify": {
+      "title": "在一个工作台搭建 Agent 工作流与 RAG 应用",
+      "summary": "组合模型、工具和检索流程，构建并部署 AI 应用，支持云端或自托管部署。",
+      "evidence": "Build Agentic workflows, RAG pipelines"
+    },
+    "open-webui/open-webui": {
+      "title": "用统一网页界面使用不同大模型",
+      "summary": "提供面向用户的 AI 聊天界面，可连接 Ollama 和兼容 OpenAI API 的模型服务。",
+      "evidence": "User-friendly AI Interface"
+    },
+    "langflow-ai/langflow": {
+      "title": "构建并部署 AI Agent 与工作流",
+      "summary": "用于搭建和部署 AI Agent 及自动化工作流的开源工具。",
+      "evidence": "building and deploying AI-powered agents and workflows"
+    },
+    "browser-use/jev-ultrafast": {
+      "title": "面向网页任务的高速 AI Agent",
+      "summary": "项目定位为快速、低成本的网页 Agent；具体速度和成本表现需进一步验证。",
+      "evidence": "Fastest and cheapest web agent"
+    },
+    "huggingface/transformers": {
+      "title": "统一使用文本、视觉、语音等多模态模型",
+      "summary": "为文本、图像、音频等机器学习模型提供定义和使用框架，覆盖训练与推理。",
+      "evidence": "the model-definition framework for state-of-the-art machine learning models"
+    },
+    "nousresearch/hermes-agent": {
+      "title": "探索随使用者持续成长的 AI Agent",
+      "summary": "项目将自身定位为能够随用户使用不断成长的 Agent；具体机制需查看项目文档。",
+      "evidence": "The agent that grows with you"
+    },
+    "morluto/rea": {
+      "title": "用 Agent 逆向分析应用与原生程序",
+      "summary": "探索由 Agent 辅助分析软件行为与底层二进制程序的工作流程。",
+      "evidence": "Reverse engineer anything with agents"
+    },
+    "lamda-nesy/research-starter-kit": {
+      "title": "从零学习科研与论文写作",
+      "summary": "按流程整理科研和论文写作基础内容；属于学习资料，而非直接可用的 AI 产品。",
+      "evidence": "从0开始，掌握做科研、写论文的基本流程"
+    }
+  }
+}
