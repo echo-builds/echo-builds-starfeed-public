@@ -565,8 +565,8 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,cover} = item;
-  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,cover,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,approximate:false};
 }
 function credibleRepo(item) {
   const text = `${item.name || ''} ${item.description || ''}`;
@@ -708,81 +708,24 @@ function fillCover(node,repo) {
   img.alt = '项目界面截图';
   img.src = repo.cover;
 }
-const searchRules = [
-  [/播客/i,['audio']], [/podcast/i,['podcast']], [/翻译|译成|translation|translate/i,['translate']], [/字幕|subtitle/i,['subtitles']], [/转录|语音转文字|transcri/i,['transcribe']],
-  [/语音|音频|录音|voice|audio/i,['audio']], [/视频|剪辑|video/i,['video']], [/图片|照片|相册|image|photo/i,['image']],
-  [/截图|screenshot/i,['screenshot']], [/原型|低代码|无代码|prototype|low.?code|no.?code/i,['prototype']],
-  [/设计系统|组件库|design system/i,['design-system']],
-  [/工作流|自动化|workflow|automation/i,['workflow']], [/智能体|助手|agent/i,['ai-agent']], [/知识库|文档问答|rag/i,['rag']],
-  [/人工智能|\bai\b/i,['ai']],
-  [/学习|教学|老师|教育|tutor|education/i,['education','ai-tutor']], [/会议|笔记|meeting|notes/i,['meeting-notes']],
-  [/搜索|检索|search/i,['search']], [/爬虫|抓取|crawler|scraper/i,['web-scraping']], [/本地|离线|local|offline/i,['self-hosted']],
-  [/手机|安卓|android|mobile/i,['android']], [/苹果|ios|iphone/i,['ios']]
-];
 function naturalSearchQuery(input) {
-  if (/配音|语音合成|文字转语音|文本转语音|text.?to.?speech|\btts\b/i.test(input)) {
-    return 'text-to-speech in:name,description,readme stars:>=100 archived:false fork:false';
-  }
-  const terms = [];
-  for (const [pattern,values] of searchRules) if (pattern.test(input)) terms.push(...values);
   const english = input.toLowerCase().match(/[a-z][a-z0-9-]{2,}/g) || [];
   const stop = new Set(['github','project','projects','want','find','show','with','that','this','open','source']);
-  terms.push(...english.filter(word=>!stop.has(word)));
-  if (!terms.length && /产品经理|product manager/i.test(input)) terms.push('productivity');
-  const unique = [...new Set(terms)].slice(0,4);
-  const phrase = unique.length ? unique.join(' ') : input.trim();
-  return `${phrase} in:name,description stars:>=${MIN_STARS} archived:false fork:false`;
+  const terms = [...new Set(english.filter(word=>!stop.has(word)))].slice(0,6);
+  const phrase = terms.length ? terms.join(' ') : input.replace(/[，。；：!?！？]/g,' ').replace(/\s+/g,' ').trim();
+  return `${phrase} in:name,description,readme stars:>=${MIN_STARS} archived:false fork:false`;
 }
-function searchChineseCopy(item, query) {
+function conservativeSearchCopy(item) {
   const original = String(item.description || '');
-  if (/^[\s【（(]*[㐀-鿿]/.test(original)) return {title:original.replace(/[。.!！].*$/,'').slice(0,34),summary:original};
-  const text = original.toLowerCase();
-  const has = pattern => pattern.test(text);
-  const transcribe = has(/transcrib|speech[- ]to[- ]text|speech recognition/);
-  const translate = has(/translat|localization/);
-  const subtitle = has(/subtitle|caption/);
-  const dub = has(/\bdub|dubbing|localization/);
-  const tts = has(/text[- ]to[- ]speech|\btts\b/);
-  const clone = has(/voice clon/);
-  const download = has(/download/);
-  const summarize = has(/summari/);
-  const chat = has(/\bchat\b|question/);
-  const local = has(/offline|local(?:ly)?|self[- ]host|personal computer/);
-  const realtime = has(/real[- ]time|live caption/);
-  const whisper = has(/whisper/);
-  const languages = text.match(/(\d+)\+?\s*languages?/);
-  let title;
-  if (download && transcribe) title = '下载音视频，并在本地转写和翻译';
-  else if (dub) title = '给视频生成多语言配音';
-  else if (clone) title = '用网页界面做语音合成和声音克隆';
-  else if (transcribe && translate) title = '把音频转成文字并翻译';
-  else if (subtitle && translate) title = '自动翻译视频字幕';
-  else if (transcribe) title = '把音频或视频转成文字';
-  else if (tts) title = '把文字转换成语音';
-  else title = `与「${query.slice(0,16)}」相关的高星项目`;
-  const capabilities = [];
-  if (download) capabilities.push('下载音视频');
-  if (transcribe) capabilities.push('语音转文字');
-  if (translate) capabilities.push('翻译');
-  if (subtitle) capabilities.push('生成或处理字幕');
-  if (dub) capabilities.push('视频配音');
-  if (tts) capabilities.push('语音合成');
-  if (clone) capabilities.push('声音克隆');
-  if (summarize) capabilities.push('内容总结');
-  if (chat) capabilities.push('围绕音视频继续提问');
-  let summary = capabilities.length ? `可以${capabilities.slice(0,4).join('、')}` : `这是一个与「${query}」相关的开源项目`;
-  if (languages) summary += `，支持 ${languages[1]}+ 种语言`;
-  if (realtime) summary += '，支持实时处理';
-  if (local) summary += '，可以在自己的电脑上运行';
-  if (whisper) summary += '，使用 Whisper 识别语音';
-  return {title,summary:summary + '。'};
+  if (/[㐀-鿿]/.test(original)) return {title:item.name,summary:original};
+  return {title:item.name,summary:original ? `仓库原始说明：${original}` : '该候选项目缺少可核验的仓库简介，请进入 README 确认具体能力。'};
 }
 function searchResult(item, query) {
   const shaped = shape(item);
   const repo = enrich({...shaped,searchResult:true,url:safeUrl(item.html_url) || `https://github.com/${item.full_name}`});
   const prepared = notes[repoKey(repo)];
   const aiCopy = item.ai_title || item.ai_summary ? {title:item.ai_title,summary:item.ai_summary} : null;
-  const copy = prepared || aiCopy || searchChineseCopy(item,query);
+  const copy = prepared || aiCopy || conservativeSearchCopy(item);
   return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:copy.summary,ai_bullets:item.ai_bullets || repo.ai_bullets,coverText:copy.summary};
 }
 async function searchGitHub(input) {
@@ -810,15 +753,15 @@ async function searchGitHub(input) {
     if (!Array.isArray(data?.items)) throw new Error('No search results');
     state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
     state.search.hint = data.mode === 'ai'
-      ? `已理解为“${data.intent || query}”，从整个 GitHub 找到 ${state.search.items.length} 个项目，按 Star 从高到低排序`
-      : `已按关键词检索整个 GitHub，找到 ${state.search.items.length} 个项目，按 Star 从高到低排序`;
+      ? `已理解为“${data.intent || query}”，找到 ${state.search.items.length} 个项目；核心需求匹配优先，Star、活跃度和项目质量作为辅助`
+      : `智能理解暂不可用，已使用通用降级检索找到 ${state.search.items.length} 个候选项目`;
   } catch {
     try {
       const params = new URLSearchParams({q:naturalSearchQuery(query),sort:'stars',order:'desc',per_page:'20'});
       const data = await request(API + '/search/repositories?' + params);
       if (!Array.isArray(data?.items)) throw new Error('No search results');
       state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
-      state.search.hint = `智能理解暂不可用，已按关键词检索整个 GitHub；结果按 Star 从高到低排序`;
+      state.search.hint = `服务暂不可用，已使用通用关键词检索；请进入 README 核对候选项目的具体能力`;
     } catch {
       state.search.error = 'GitHub 暂时没有返回结果，请稍后再试';
     }
@@ -1140,7 +1083,7 @@ function render() {
   const empty = $('#empty');
   empty.hidden = state.search.loading || items.length > 0;
   empty.querySelector('h2').textContent = savedView ? '还没有收藏' : searchView ? '没有找到合适的项目' : '暂时没有新项目';
-  empty.querySelector('p').textContent = savedView ? '打开项目详情后，可以把想留着看的项目收进这里。' : searchView ? '换一个更具体的说法，例如“把播客转成中文字幕”。' : '晚点再回来发现新项目。';
+  empty.querySelector('p').textContent = savedView ? '打开项目详情后，可以把想留着看的项目收进这里。' : searchView ? '换一个更具体的说法，说明输入、期望结果和必须满足的条件。' : '晚点再回来发现新项目。';
   empty.querySelector('button').hidden = !savedView;
   updateStatus();
 }
