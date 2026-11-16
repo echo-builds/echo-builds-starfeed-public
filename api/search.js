@@ -115,7 +115,7 @@ function shape(item) {
 
 async function githubSearch(query,token) {
   const cleaned = cleanQuery(query);
-  const scope = /\bin:/.test(cleaned) ? '' : ' in:name,description,readme';
+  const scope = /\bin:/.test(cleaned) ? '' : ' in:name,description,topics';
   const q = `${cleaned}${scope} archived:false fork:false`;
   const params = new URLSearchParams({q,sort:'stars',order:'desc',per_page:'40'});
   const response = await fetch(`${GITHUB_API}/search/repositories?${params}`,{
@@ -133,7 +133,7 @@ async function readmeExcerpt(item) {
   try {
     const response = await fetch(`https://raw.githubusercontent.com/${path}/${branch}/README.md`,{signal:AbortSignal.timeout(5000)});
     if (!response.ok) return '';
-    return cleanQuery((await response.text()).replace(/<[^>]+>/g,' ').replace(/!\[[^\]]*\]\([^)]*\)/g,' ')).slice(0,1200);
+    return String(await response.text()).replace(/<[^>]+>/g,' ').replace(/!\[[^\]]*\]\([^)]*\)/g,' ').replace(/[\r\n]+/g,' ').replace(/\s+/g,' ').trim().slice(0,1200);
   } catch { return ''; }
 }
 
@@ -150,13 +150,16 @@ function fallbackRank(input,items) {
     if (wantsTts) {
       const matches = /text[- ]to[- ]speech|speech synthesis|\btts\b|voice clon|dubbing|audio generation|fish.?speech|indextts|qwen.*tts|moss.?tts/.test(text);
       const wrongDirection = /speech[- ]to[- ]text|transcrib|automatic speech recognition|\basr\b/.test(text) && !matches;
-      if (!matches || wrongDirection) return [];
-      relevance = 76 + (/chinese|mandarin|中文|multilingual/.test(text) ? 8 : 0) + (/expressive|emotion|prosody|pause|natural|multi.?speaker|voice clon|demo/.test(text) ? 7 : 0);
+      const supportsChinese = /chinese|mandarin|中文|multilingual/.test(text);
+      if (!matches || wrongDirection || (/中文/.test(input) && !supportsChinese)) return [];
+      relevance = 76 + (supportsChinese ? 8 : 0) + (/expressive|emotion|prosody|pause|natural|multi.?speaker|voice clon|demo/.test(text) ? 7 : 0);
     }
     const evidence = wantsTts ? (/chinese|mandarin|中文/.test(text) ? 5 : 0) + (/expressive|emotion|prosody|pause|duration control|instruction/.test(text) ? 7 : 0) + (/multi.?speaker|dialogue|podcast/.test(text) ? 5 : 0) + (/demo|audio sample|试听/.test(text) ? 3 : 0) : 0;
     const rank = relevance + evidence + Math.min(18,Math.log10(Math.max(1,Number(item.stargazers_count || 0))) * 3.6);
     const {readme_excerpt,...repo} = item;
-    return [{...repo,relevance_score:relevance,rank_score:rank}];
+    const ai_title = wantsTts ? `${item.name}：${/multi.?speaker|dialogue|podcast/.test(text) ? '多角色配音' : '自然语音合成'}` : undefined;
+    const ai_summary = wantsTts ? `可将文本生成语音${/chinese|mandarin|中文/.test(text) ? '，支持中文' : ''}${/expressive|emotion|prosody|pause|instruction/.test(text) ? '，并提供语气、情感或韵律控制' : ''}${/voice clon/.test(text) ? '，支持声音克隆' : ''}。` : undefined;
+    return [{...repo,relevance_score:relevance,rank_score:rank,ai_title,ai_summary}];
   }).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
 }
 
@@ -174,7 +177,7 @@ async function rankAndDescribe(req,input,items) {
   for (const item of Array.isArray(result.items) ? result.items : []) {
     copy.set(String(item.full_name || '').toLowerCase(),item);
   }
-  return items.flatMap(item=>{
+  const assessed = items.flatMap(item=>{
     const text = copy.get(String(item.full_name).toLowerCase());
     const relevance = Math.max(0,Math.min(100,Number(text?.relevance_score || 0)));
     if (!text || text.relevant === false || relevance < 62) return [];
@@ -183,7 +186,11 @@ async function rankAndDescribe(req,input,items) {
     const rank = relevance + ttsEvidence + Math.min(18,Math.log10(Math.max(1,Number(item.stargazers_count || 0))) * 3.6);
     const {readme_excerpt,...repo} = item;
     return [{...repo,relevance_score:relevance,rank_score:rank,ai_title:cleanQuery(text.title).slice(0,44),ai_summary:cleanQuery(text.summary).slice(0,160),ai_bullets:(Array.isArray(text.bullets) ? text.bullets : []).map(cleanQuery).filter(Boolean).slice(0,3)}];
-  }).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
+  });
+  if (!isTtsRequest(input)) return assessed.sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
+  const merged = new Map(fallbackRank(input,items).map(item=>[item.full_name.toLowerCase(),item]));
+  for (const item of assessed) merged.set(item.full_name.toLowerCase(),item);
+  return [...merged.values()].sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
 }
 
 async function describeItems(req,items) {
