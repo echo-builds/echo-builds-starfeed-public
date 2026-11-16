@@ -19,18 +19,24 @@ function aiToken(req) {
 async function askModel(req,messages,maxTokens = 900) {
   const token = aiToken(req);
   if (!token) throw new Error('ai_unavailable');
-  const response = await fetch(GATEWAY_API,{
-    method:'POST',
-    headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:SEARCH_MODEL,
-      reasoning:{effort:'none'},
-      temperature:0.1,
-      max_tokens:maxTokens,
-      messages
-    }),
-    signal:AbortSignal.timeout(12000)
-  });
+  let response;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    response = await fetch(GATEWAY_API,{
+      method:'POST',
+      headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:SEARCH_MODEL,
+        reasoning:{effort:'none'},
+        temperature:0.1,
+        max_tokens:maxTokens,
+        messages
+      }),
+      signal:AbortSignal.timeout(15000)
+    });
+    if (response.status !== 429 || attempt > 0) break;
+    const retryAfter = Math.min(2500,Math.max(800,Number(response.headers.get('retry-after') || 1) * 1000));
+    await new Promise(resolve=>setTimeout(resolve,retryAfter));
+  }
   if (!response.ok) throw new Error('ai_gateway_' + response.status);
   const data = await response.json();
   const parsed = jsonFrom(data?.choices?.[0]?.message?.content);
@@ -105,22 +111,16 @@ async function githubSearch(query,token) {
 
 async function addChineseCopy(req,input,items) {
   if (!items.length) return items;
-  const chunks = [];
-  for (let index = 0; index < items.length; index += 8) chunks.push(items.slice(index,index + 8));
-  const batches = await Promise.allSettled(chunks.map(async chunk=>{
-    const candidates = chunk.map(item=>({
-      full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count
-    }));
-    return askModel(req,[
-      {role:'system',content:'你筛选 GitHub 搜索结果并写中文项目介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"title":"一句中文标题","summary":"一句中文说明","bullets":["能力一","能力二"]}]}。必须为输入中的每个项目返回一项并保持顺序与 full_name；确实不符合用户需求时 relevant=false。title 说明用户能用它做什么，不复述仓库名；summary 结合仓库描述和用户需求说明核心用途；bullets 提炼 2-3 个从输入资料可确认的能力。必须客观，不虚构，避免营销话术。'},
-      {role:'user',content:JSON.stringify({request:input,candidates})}
-    ],1200);
+  const candidates = items.map(item=>({
+    full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count
   }));
+  const result = await askModel(req,[
+    {role:'system',content:'你筛选 GitHub 搜索结果并写中文项目介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"title":"一句中文标题","summary":"一句中文说明","bullets":["能力一","能力二"]}]}。必须为输入中的每个项目返回一项并保持顺序与 full_name；确实不符合用户需求时 relevant=false。title 说明用户能用它做什么，不复述仓库名；summary 结合仓库描述和用户需求说明核心用途；bullets 最多 2 个，只写从输入资料可确认的能力。必须客观，不虚构，避免营销话术。'},
+    {role:'user',content:JSON.stringify({request:input,candidates})}
+  ],3500);
   const copy = new Map();
-  for (const batch of batches) if (batch.status === 'fulfilled') {
-    for (const item of Array.isArray(batch.value.items) ? batch.value.items : []) {
-      copy.set(String(item.full_name || '').toLowerCase(),item);
-    }
+  for (const item of Array.isArray(result.items) ? result.items : []) {
+    copy.set(String(item.full_name || '').toLowerCase(),item);
   }
   return items.flatMap(item=>{
     const text = copy.get(String(item.full_name).toLowerCase());
@@ -131,22 +131,16 @@ async function addChineseCopy(req,input,items) {
 
 async function describeItems(req,items) {
   if (!items.length) return [];
-  const chunks = [];
-  for (let index = 0; index < items.length; index += 8) chunks.push(items.slice(index,index + 8));
-  const batches = await Promise.allSettled(chunks.map(async chunk=>{
-    const candidates = chunk.map(item=>({
-      full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count
-    }));
-    return askModel(req,[
-      {role:'system',content:'你为 GitHub 项目信息流写准确、易懂的中文介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","title":"一句中文标题","summary":"一句中文说明","bullets":["能力一","能力二"]}]}。必须为输入中的每个项目返回一项并保持顺序与 full_name。title 直接说明这个项目能帮用户做什么，不复述仓库名；summary 用一句话介绍用途、核心能力或适合谁；bullets 提炼 2-3 个从仓库描述和 topics 可确认的能力。不要写 Star 数，不要写“点击查看 GitHub”，不要虚构，不用营销话术。'},
-      {role:'user',content:JSON.stringify({candidates})}
-    ],1200);
+  const candidates = items.map(item=>({
+    full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count
   }));
+  const result = await askModel(req,[
+    {role:'system',content:'你为 GitHub 项目信息流写准确、易懂的中文介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","title":"一句中文标题","summary":"一句中文说明"}]}。必须为输入中的每个项目返回一项并保持顺序与 full_name。title 直接说明这个项目能帮用户做什么，不复述仓库名；summary 用一句话介绍用途、核心能力或适合谁。不要写 Star 数，不要写“点击查看 GitHub”，不要虚构，不用营销话术。'},
+    {role:'user',content:JSON.stringify({candidates})}
+  ],3500);
   const copy = new Map();
-  for (const batch of batches) if (batch.status === 'fulfilled') {
-    for (const item of Array.isArray(batch.value.items) ? batch.value.items : []) {
-      copy.set(String(item.full_name || '').toLowerCase(),item);
-    }
+  for (const item of Array.isArray(result.items) ? result.items : []) {
+    copy.set(String(item.full_name || '').toLowerCase(),item);
   }
   return items.map(item=>{
     const text = copy.get(String(item.full_name).toLowerCase());
