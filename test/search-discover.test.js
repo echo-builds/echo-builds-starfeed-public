@@ -240,3 +240,19 @@ test('产品封面可以从图片 alt 识别，忽略徽章和图标',()=>{
   assert.ok(images.some(url=>url.endsWith('/product_showcase.jpg')));
   assert.ok(!images.some(url=>url.includes('app-icon') || url.includes('shields.io')));
 });
+
+test('零付费默认配置不会启用任何模型请求',async()=>{
+  const freeAI = require('../api/_lib/free-ai');
+  assert.equal(freeAI.enabled(),false);
+  await assert.rejects(()=>freeAI.generateJSON([{role:'user',content:'hello'}]),/free_ai_disabled/);
+});
+
+test('首页预先核对的中文介绍只在原始证据仍存在时启用',()=>{
+  const repo = {
+    full_name:'langgenius/dify',
+    description:'Build Agentic workflows, RAG pipelines, with rich AI model and tool support on one collaborative workspace.'
+  };
+  const valid=discover.verifiedCachedCopy(repo);
+  assert.ok(valid?.summary?.includes('Agent'));
+  assert.equal(discover.verifiedCachedCopy({...repo,description:'Unrelated new project'}),null);
+});
