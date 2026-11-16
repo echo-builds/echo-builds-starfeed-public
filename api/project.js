@@ -66,7 +66,17 @@ function selectProductMarkdown(markdown) {
   }
   let text = chosen.map(section=>section.body.join('\n').trim()).filter(Boolean).join('\n\n');
   text = text.replace(/(?:\n\s*){3,}/g,'\n\n').trim();
-  return text.slice(0,15000);
+  // Avoid cutting an HTML image/tag in half. Long technical sections are not
+  // needed for the product-focused reading view.
+  const lines = text.split('\n');
+  const kept = [];
+  let total = 0;
+  for (const line of lines) {
+    if (total + line.length > 7000) break;
+    kept.push(line);
+    total += line.length + 1;
+  }
+  return kept.join('\n').replace(/<[^>]*$/,'').trim();
 }
 
 function resolveImages(markdown,repo) {
@@ -126,15 +136,21 @@ module.exports = async function handler(req,res) {
     const chinese = isMostlyChinese(selected);
     let content = selected;
     let translated = false;
+    let translationStatus = chinese ? 'original_chinese' : 'original_untranslated';
     if (!chinese) {
       try {
-        content = await translate(req,selected);
-        translated = true;
+        const result = await translate(req,selected);
+        // Avoid replacing readable source with truncated or empty AI output.
+        if (result && /[㐀-鿿]/.test(result) && !result.trim().endsWith('<')) {
+          content = result;
+          translated = true;
+          translationStatus = 'translated';
+        }
       } catch {
-        content = selected;
+        // Show the source faithfully, with an explicit untranslated indicator.
       }
     }
-    return res.status(200).json({repo,experience,readme_markdown:content,readme_url:`https://github.com/${fullName}#readme`,translated});
+    return res.status(200).json({repo,experience,readme_markdown:content,readme_url:`https://github.com/${fullName}#readme`,translated,translation_status:translationStatus});
   } catch (error) {
     return res.status(502).json({error:'project_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
