@@ -81,10 +81,11 @@ Vercel 部署需要配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` 和 `SESSI
 ### 免费运行与可选 AI 配置
 
 - **默认零模型请求**：推荐流优先使用已核对的中文内容；新仓库仍可进入推荐，但可能显示原始简介。GitHub 登录、Stars、推荐流不要求模型 API Key。
-- **如需自然语言搜索与 README 中文翻译**：可以自行申请 Google AI Studio 的 Gemini API Key，并在 Vercel 配置 `GEMINI_API_KEY` 与 `ENABLE_FREE_GEMINI=true`。模型默认为 `gemini-2.5-flash-lite`，可通过 `GEMINI_FREE_MODEL` 修改。
+- **另一个免费模型选项（Gemini）**：可以自行申请 Google AI Studio 的 Gemini API Key，并在 Vercel 配置 `GEMINI_API_KEY` 与 `ENABLE_FREE_GEMINI=true`。模型默认为 `gemini-2.5-flash-lite`，可通过 `GEMINI_FREE_MODEL` 修改。
+- **推荐：免费千问自然语言搜索**：在 Cloudflare 创建 **Workers Free** 账户，获取 Account ID 和有 Workers AI 使用权限的 API Token。在 Vercel 环境变量中设置 `FREE_AI_PROVIDER=cloudflare-qwen`、`CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`。默认固定使用 Cloudflare 托管的 `@cf/qwen/qwen3.8-27b`，通过 Workers AI 的 API 调用，无需阿里云百炼额度。Workers Free 每日免费配额用完后会限流或停止服务；**不要升级到 Workers Paid，也不要配置付费自动回退**。
 - **免费额度用尽**：自动回退为 GitHub 检索和原始 README，不会切换到 Vercel AI Gateway 或其他付费模型。免费 Gemini 是否可用、限额和收费状态以 Google AI Studio 中该项目的实际设置为准；为确保不产生费用，请使用未启用付费结算的免费层项目。
 - **新项目中文介绍定期补充**：仓库的 [Refresh verified Chinese project cards](https://github.com/echo-builds/echo-builds-starfeed/actions/workflows/refresh-featured-copy.yml) 工作流每天执行一次。默认没有密钥时仅跳过，不会调用模型或生成内容。需要时可在 GitHub Actions Secrets 中设置 `ENABLE_FREE_GEMINI=true` 和 `GEMINI_API_KEY`，每次最多尝试 4 个项目；成功且证据校验通过后提交至 `data/featured-copy.json`。设置于 Vercel 的环境变量不会自动同步至 GitHub Actions。
 - **可选的首页 AI 分类**：只有额外配置 `ENABLE_LIVE_DISCOVERY_AI=true` 才会调用模型，不建议免费部署开启；默认关闭。
 - **可选 GitHub 读取凭证**：`GITHUB_API_TOKEN` 可提高 GitHub API 读取额度，不是必须项。
 
-本地只启动静态服务器时无法运行后端接口；完整使用需要部署 Vercel Functions。
+本地只启动静态服务器时无法运行后端接口；完整使用需要部署 Vercel Functions。推荐的千问和 Gemini 两种方式任选其一；当 `FREE_AI_PROVIDER=cloudflare-qwen` 时使用千问，默认没有付费模型降级。
