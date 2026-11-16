@@ -3,7 +3,7 @@ const {getSession,refreshSession,setSession} = require('./_lib/session');
 const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
-const TTS_QUERIES = ['TTS','text-to-speech','speech synthesis'];
+const TTS_QUERIES = ['TTS','Chinese TTS','multi-speaker TTS','text-to-speech','speech synthesis'];
 
 function isTtsRequest(input) {
   return /配音|语音合成|文字转语音|文本转语音|text.?to.?speech|\btts\b/i.test(input);
@@ -153,8 +153,8 @@ function fallbackRank(input,items) {
       const primaryMatch = /tts|text.?to.?speech|speech|voice|dubb|audio.?book/.test(primary);
       const wrongDirection = /speech[- ]to[- ]text|transcrib|automatic speech recognition|\basr\b/.test(text) && !matches;
       const supportsChinese = /chinese|mandarin|中文|multilingual/.test(text);
-      if (!matches || !primaryMatch || wrongDirection || (/中文/.test(input) && !supportsChinese)) return [];
-      relevance = 76 + (supportsChinese ? 8 : 0) + (/expressive|emotion|prosody|pause|natural|multi.?speaker|voice clon|demo/.test(text) ? 7 : 0);
+      if (!matches || !primaryMatch || wrongDirection) return [];
+      relevance = 76 + (supportsChinese ? 8 : /中文/.test(input) ? -5 : 0) + (/expressive|emotion|prosody|pause|natural|multi.?speaker|voice clon|demo/.test(text) ? 7 : 0);
     }
     const evidence = wantsTts ? (/chinese|mandarin|中文/.test(text) ? 5 : 0) + (/expressive|emotion|prosody|pause|duration control|instruction/.test(text) ? 7 : 0) + (/multi.?speaker|dialogue|podcast/.test(text) ? 5 : 0) + (/demo|audio sample|试听/.test(text) ? 3 : 0) : 0;
     const rank = relevance + evidence + Math.min(18,Math.log10(Math.max(1,Number(item.stargazers_count || 0))) * 3.6);
