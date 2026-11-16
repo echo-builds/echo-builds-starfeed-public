@@ -99,6 +99,17 @@ dialog::backdrop{background:#18161280}
 #details figure{margin:14px 0 18px}
 #details figure img{display:block;width:100%;max-height:390px;object-fit:contain;border-radius:10px;background:#f3f1ee}
 #details figcaption{font-size:11px;color:var(--muted);margin-top:4px}
+.readme-body{margin:0 0 24px}
+.readme-body h3{font-size:20px!important;line-height:1.35;margin:24px 0 8px!important}
+.readme-body h4{font-size:16px;line-height:1.4;margin:19px 0 6px}
+.readme-body p,.readme-body li{font-size:14px;line-height:1.75}
+.readme-body p{margin:0 0 12px}
+.readme-body ul,.readme-body ol{padding-left:1.35em;margin:0 0 14px}
+.readme-body pre{overflow:auto;padding:13px;border-radius:9px;background:#f4f1ed;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+.readme-body figure{margin:18px 0!important}
+.readme-body .loading-copy{color:var(--muted)}
+.readme-source{font-size:12px;color:var(--muted);margin-top:-10px}
+.readme-source a{text-decoration:underline;text-underline-offset:2px}
 .actions{display:grid;grid-template-columns:1fr 1.08fr .72fr;gap:8px;padding-top:12px;border-top:1px solid var(--rule)}
 .actions.two{grid-template-columns:1fr 1fr}
 .actions>*{min-width:0;padding-inline:7px;text-align:center}
@@ -145,11 +156,11 @@ dialog::backdrop{background:#18161280}
   <main>
     <section class="heading">
       <h1 id="heading">推荐</h1>
-      <p id="lede">值得 AI 产品经理逛一逛的开源项目</p>
+      <p id="lede">发现近期快速获得关注，或刚完成重要迭代的高质量 GitHub 项目</p>
     </section>
     <p id="status" class="status" role="status" hidden></p>
     <section id="feed" class="feed" aria-label="项目"></section>
-    <div id="feed-sentinel" class="feed-sentinel" aria-live="polite">继续下滑，发现更早的高星项目</div>
+    <div id="feed-sentinel" class="feed-sentinel" aria-live="polite">继续下滑，发现更早收录的项目</div>
     <div id="groups" hidden></div>
     <section id="empty" class="empty" hidden><h2></h2><p></p><button class="primary" type="button" hidden>看看推荐</button></section>
   </main>
@@ -468,7 +479,7 @@ function enrich(repo) {
   return {...merged,published_at:repo.published_at || note.published_at,theme:theme || inferTheme(merged),forPM,what,why,tryIt,
     url:'https://github.com/' + repo.full_name};
 }
-const previous = storage.get('recent',null);
+const previous = storage.get('recent-v2',null);
 const oldCatalog = Array.isArray(previous?.repos) ? previous.repos.filter(repo=>validRepo(repo) && (guides[repoKey(repo)] ||
   (Number(repo.forks_count) >= MIN_FORKS && repo.license?.spdx_id && !['NOASSERTION','OTHER'].includes(repo.license.spdx_id)))) : [];
 const oldSaved = storage.get('saved',[]);
@@ -546,8 +557,8 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,license,ai_title,ai_summary,ai_bullets} = item;
-  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,html_url,license,ai_title,ai_summary,ai_bullets,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,cover} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,cover,approximate:false};
 }
 function credibleRepo(item) {
   const text = `${item.name || ''} ${item.description || ''}`;
@@ -626,46 +637,28 @@ async function loadDiscover({reset = false} = {}) {
   state.refreshError = false;
   if (reset) {
     state.discoveryDone = false;
-    state.discoveryCursor = initialDiscoveryCursor();
+    state.discoveryCursor = 1;
   }
   const sentinel = $('#feed-sentinel');
-  sentinel.textContent = reset ? '正在获取最新项目…' : '正在加载更早的高星项目…';
+  sentinel.textContent = reset ? '正在筛选近期高质量项目…' : '正在加载更早收录的项目…';
   const current = reset ? [] : state.catalog;
   const currentKeys = new Set(current.map(repoKey));
-  const knownCopy = new Map(state.catalog.map(repo=>[repoKey(repo),repo]));
-  let cursor = state.discoveryCursor || initialDiscoveryCursor();
+  const cursor = Number(state.discoveryCursor || 1);
   let incoming = [];
   try {
-    for (let attempt = 0; attempt < 3 && incoming.length === 0; attempt++) {
-      const window = previousWindow(cursor);
-      const query = new URLSearchParams({
-        q:`is:public archived:false fork:false stars:>=${MIN_STARS} forks:>=${MIN_FORKS} created:${window.from}..${window.to}`,
-        sort:'stars',order:'desc',per_page:'100'
-      });
-      const data = await request(API + '/search/repositories?' + query);
-      if (!Array.isArray(data?.items)) throw new Error('No projects');
-      const names = new Set();
-      incoming = data.items.filter(credibleRepo).filter(item=>{
-        const name = item.name.toLowerCase();
-        if (names.has(name)) return false;
-        names.add(name);
-        return true;
-      }).map(shape).map(repo=>{
-        const known = knownCopy.get(repoKey(repo));
-        return known ? {...repo,ai_title:known.ai_title,ai_summary:known.ai_summary,ai_bullets:known.ai_bullets} : repo;
-      }).sort((a,b)=>Date.parse(b.created_at) - Date.parse(a.created_at) || b.stargazers_count - a.stargazers_count);
-      incoming = (await prepareDiscoveryCopy(incoming)).filter(preparedCopy);
-      cursor = window.next;
-    }
+    const response = await fetch('/api/discover?page=' + cursor,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
+    if (!response.ok) throw new Error('Discover HTTP ' + response.status);
+    const data = await response.json();
+    incoming = (Array.isArray(data?.items) ? data.items : []).map(shape).filter(preparedCopy);
     const merged = new Map(current.map(repo=>[repoKey(repo),repo]));
     for (const repo of incoming) merged.set(repoKey(repo),repo);
     state.catalog = [...merged.values()];
-    state.discoveryCursor = cursor;
-    state.discoveryDone = new Date(cursor + 'T00:00:00+08:00').getFullYear() < 2008;
+    state.discoveryCursor = Number(data.next_page || cursor + 1);
+    state.discoveryDone = data.has_more === false || incoming.length === 0;
     state.date = today();
     state.source = 'live';
     state.lastFetch = Date.now();
-    storage.put('recent',{date:state.date,repos:state.catalog.slice(0,200),cursor:state.discoveryCursor});
+    storage.put('recent-v2',{date:state.date,repos:state.catalog.slice(0,200),cursor:state.discoveryCursor});
   } catch {
     state.refreshError = true;
   } finally {
@@ -679,10 +672,11 @@ async function loadDiscover({reset = false} = {}) {
         feed.append(...additions);
         if (masonry) for (const item of additions) masonry.observe(item);
         const sentinel = $('#feed-sentinel');
-        sentinel.textContent = state.discoveryDone ? '已经看到 GitHub 最早期的项目' : '继续下滑，发现更早的高星项目';
+        sentinel.textContent = state.discoveryDone ? '已看完近期收录的高质量项目' : '继续下滑，发现更早收录的项目';
         updateStatus();
       }
     }
+    openRouteDetail();
   }
 }
 
@@ -827,9 +821,9 @@ function card(repo) {
   el.querySelector('.stars').textContent = '★ ' + (repo.approximate ? '约 ' : '') + compact.format(repo.stargazers_count);
   const date = el.querySelector('.published');
   const shownDate = repo.feedResult ? repo.created_at : repo.published_at || (repo.searchResult ? repo.updated_at : repo.created_at);
-  date.textContent = shownDate ? displayDate(shownDate) : '日期暂缺';
-  date.setAttribute('aria-label',dateLabel(repo));
-  date.title = dateLabel(repo);
+  date.textContent = repo.selection_reason || (shownDate ? displayDate(shownDate) : '日期暂缺');
+  date.setAttribute('aria-label',repo.selection_reason || dateLabel(repo));
+  date.title = repo.selection_reason || dateLabel(repo);
   fillCover(el.querySelector('.cover'),repo);
   const trigger = el.querySelector('.project');
   trigger.dataset.project = repoKey(repo);
@@ -875,6 +869,93 @@ function section(heading,content) {
   }
   return section;
 }
+function markdownText(value) {
+  return String(value || '')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g,'$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1')
+    .replace(/[*_~`]/g,'')
+    .replace(/<[^>]+>/g,'')
+    .trim();
+}
+function renderReadmeMarkdown(markdown,node) {
+  node.replaceChildren();
+  const lines = String(markdown || '').replace(/\r/g,'').split('\n');
+  let list = null;
+  let code = null;
+  const closeList = ()=>{ list = null; };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (/^```/.test(line)) {
+      closeList();
+      if (code) { node.append(code); code = null; }
+      else { code = document.createElement('pre'); code.append(document.createElement('code')); }
+      continue;
+    }
+    if (code) {
+      code.firstElementChild.textContent += raw + '\n';
+      continue;
+    }
+    if (!line) { closeList(); continue; }
+    const image = line.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)(?:\s+["'][^"']*["'])?\)$/i);
+    const htmlImage = line.match(/^<img\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["'][^>]*>/i);
+    if (image || htmlImage) {
+      closeList();
+      const figure = document.createElement('figure');
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.alt = image?.[1] || '项目界面';
+      img.src = image?.[2] || htmlImage[1];
+      img.onerror = ()=>figure.remove();
+      figure.append(img);
+      if (image?.[1]) { const caption=document.createElement('figcaption'); caption.textContent=image[1]; figure.append(caption); }
+      node.append(figure);
+      continue;
+    }
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1].length <= 2 ? 'h3' : 'h4';
+      const title = document.createElement(level);
+      title.textContent = markdownText(heading[2]);
+      node.append(title);
+      continue;
+    }
+    const bullet = line.match(/^[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    if (bullet || ordered) {
+      const kind = ordered ? 'ol' : 'ul';
+      if (!list || list.tagName.toLowerCase() !== kind) { list = document.createElement(kind); node.append(list); }
+      const item = document.createElement('li');
+      item.textContent = markdownText((bullet || ordered)[1]);
+      list.append(item);
+      continue;
+    }
+    closeList();
+    const paragraph = document.createElement('p');
+    paragraph.textContent = markdownText(line);
+    node.append(paragraph);
+  }
+  if (code) node.append(code);
+}
+async function hydrateReadme(repo,body,source) {
+  try {
+    const response = await fetch('/api/project?repo=' + encodeURIComponent(repo.full_name),{headers:{Accept:'application/json'},signal:AbortSignal.timeout(40000)});
+    if (!response.ok) throw new Error('Project HTTP ' + response.status);
+    const data = await response.json();
+    if (!data.readme_markdown) throw new Error('README content unavailable');
+    if (state.openRepo !== repoKey(repo)) return;
+    renderReadmeMarkdown(data.readme_markdown,body);
+    source.replaceChildren();
+    source.append('内容来自项目 README · ');
+    const link = external(data.readme_url || repo.url,'查看原文');
+    link.className = '';
+    source.append(link);
+  } catch {
+    if (state.openRepo !== repoKey(repo)) return;
+    body.replaceChildren(section('项目简介',repo.summary || 'README 暂时无法读取，请稍后重试。'));
+    source.textContent = 'README 暂时无法读取';
+  }
+}
 function openDetails(repo,trigger,{pushRoute = true} = {}) {
   if (!detailReady(repo)) return;
   if ($('#detail').open && state.openRepo === repoKey(repo)) return;
@@ -891,49 +972,11 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   header.textContent = titleOf(repo);
   const meta = paragraph(`${repo.full_name} · ★ ${repo.approximate ? '约 ' : ''}${exact.format(repo.stargazers_count)}`,'detail-meta');
   details.replaceChildren(header,meta);
-  const hasEditorialSections = Array.isArray(repo.authorSections) && repo.authorSections.length;
-  if (hasEditorialSections) {
-    for (const item of repo.authorSections) {
-      const block = document.createElement('section');
-      if (item.heading) {
-        const label = document.createElement('h3');
-        label.textContent = item.heading;
-        block.append(label);
-      }
-      for (const text of item.paragraphs || []) block.append(paragraph(text));
-      if (item.bullets?.length) {
-        const list = document.createElement(item.ordered ? 'ol' : 'ul');
-        for (const text of item.bullets) {
-          const row = document.createElement('li');
-          row.textContent = text;
-          list.append(row);
-        }
-        block.append(list);
-      }
-      details.append(block);
-    }
-  } else {
-    const summary = repo.summary || (hasChinese(repo.description) ? repo.description : '这个项目的中文介绍正在整理中。');
-    details.append(section('项目简介',summary));
-    if (Array.isArray(repo.ai_bullets) && repo.ai_bullets.length) details.append(section('主要能力',repo.ai_bullets));
-    const facts = [];
-    if (Number(repo.forks_count) > 0) facts.push(`${exact.format(repo.forks_count)} Fork`);
-    if (repo.license?.spdx_id && !['NOASSERTION','OTHER'].includes(repo.license.spdx_id)) facts.push(`${repo.license.spdx_id} 开源许可`);
-    if (repo.created_at) facts.push(`${displayDate(repo.created_at)} 创建`);
-    if (facts.length) details.append(section('项目信息',facts));
-  }
-  if (repo.cover) {
-    const figure = document.createElement('figure');
-    figure.hidden = true;
-    const img = document.createElement('img');
-    const caption = document.createElement('figcaption');
-    caption.textContent = '项目实际界面';
-    img.alt = '项目界面截图';
-    img.onload = ()=>{ figure.hidden = false; };
-    img.src = repo.cover;
-    figure.append(img,caption);
-    details.append(figure);
-  }
+  const readmeBody = document.createElement('article');
+  readmeBody.className = 'readme-body';
+  readmeBody.append(paragraph('正在读取并翻译 README 中的产品介绍…','loading-copy'));
+  const readmeSource = paragraph('','readme-source');
+  details.append(readmeBody,readmeSource);
   const actions = document.createElement('div');
   actions.className = 'actions';
   const experience = experienceOf(repo);
@@ -973,6 +1016,7 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   details.append(actions,notice);
   $('#detail').showModal();
   $('#detail').scrollTop = 0;
+  hydrateReadme(repo,readmeBody,readmeSource);
 }
 function openRouteDetail() {
   const wanted = new URLSearchParams(location.search).get('repo');
@@ -1014,7 +1058,7 @@ function render() {
   const headingWrap = document.querySelector('.heading');
   headingWrap.classList.toggle('discover-heading',!savedView && !searchView);
   $('#heading').textContent = savedView ? '收藏' : searchView ? '搜索结果' : '';
-  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? `“${state.search.query}”` : '按创建时间从新到旧，持续发现高星且有真实社区参与的 GitHub 项目';
+  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? `“${state.search.query}”` : '发现近期快速获得关注，或刚完成重要迭代的高质量 GitHub 项目';
   $('#search-dock').hidden = savedView;
   for (const tab of document.querySelectorAll('[data-view]')) {
     if (tab.dataset.view === state.view || (searchView && tab.dataset.view === 'discover')) tab.setAttribute('aria-current','page'); else tab.removeAttribute('aria-current');
@@ -1024,8 +1068,8 @@ function render() {
   feed.hidden = savedView;
   groups.hidden = !savedView;
   sentinel.hidden = savedView || searchView;
-  if (!sentinel.hidden) sentinel.textContent = state.loadingMore ? '正在加载更多…' : state.discoveryDone ? '已经看到 GitHub 最早期的项目' :
-    state.refreshError ? '暂时无法继续加载，向上滑动后再试' : '继续下滑，发现更早的高星项目';
+  if (!sentinel.hidden) sentinel.textContent = state.loadingMore ? '正在加载更多…' : state.discoveryDone ? '已看完近期收录的高质量项目' :
+    state.refreshError ? '暂时无法继续加载，向上滑动后再试' : '继续下滑，发现更早收录的项目';
   masonry?.disconnect();
   feed.replaceChildren();
   groups.replaceChildren();
