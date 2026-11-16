@@ -941,11 +941,7 @@ async function hydrateReadme(repo,body,source) {
     if (!data.readme_markdown) throw new Error('README content unavailable');
     if (state.openRepo !== repoKey(repo)) return;
     renderReadmeMarkdown(data.readme_markdown,body);
-    source.replaceChildren();
-    source.append('内容来自项目 README · ');
-    const link = external(data.readme_url || repo.url,'查看原文');
-    link.className = '';
-    source.append(link);
+    source.textContent = '内容来自项目 README';
   } catch {
     if (state.openRepo !== repoKey(repo)) return;
     body.replaceChildren(section('项目简介',repo.summary || 'README 暂时无法读取，请稍后重试。'));
@@ -1033,6 +1029,11 @@ function closeDetailRoute() {
     history.replaceState({},'',url);
   }
   $('#detail').close();
+}
+function clickedDialogBackdrop(dialog,event) {
+  if (event.target !== dialog) return false;
+  const box = dialog.getBoundingClientRect();
+  return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
 }
 const masonry = 'ResizeObserver' in window ? new ResizeObserver(entries=>{
   for (const {target} of entries) {
@@ -1189,8 +1190,10 @@ const discoveryObserver = new IntersectionObserver(entries=>{
 discoveryObserver.observe($('#feed-sentinel'));
 $('#detail .close').addEventListener('click',closeDetailRoute);
 $('#detail').addEventListener('cancel',event=>{ event.preventDefault(); closeDetailRoute(); });
+$('#detail').addEventListener('click',event=>{ if (clickedDialogBackdrop($('#detail'),event)) closeDetailRoute(); });
 $('#account').addEventListener('click',()=>{ renderAccount(); $('#auth-dialog').showModal(); });
 $('#auth-dialog .close').addEventListener('click',()=>$('#auth-dialog').close());
+$('#auth-dialog').addEventListener('click',event=>{ if (clickedDialogBackdrop($('#auth-dialog'),event)) $('#auth-dialog').close(); });
 $('#auth-start').addEventListener('click',startGitHubLogin);
 $('#auth-sync').addEventListener('click',async()=>{ $('#auth-sync').textContent='同步中…'; try { await syncGitHubStars(); $('#auth-sync').textContent='同步完成'; } catch { $('#auth-sync').textContent='同步失败，请重试'; } });
 $('#local-import-yes').addEventListener('click',async()=>{
@@ -1256,6 +1259,7 @@ $('#install-app').addEventListener('click',async()=>{
   $('#install-dialog').showModal();
 });
 $('#install-dialog .close').addEventListener('click',()=>$('#install-dialog').close());
+$('#install-dialog').addEventListener('click',event=>{ if (clickedDialogBackdrop($('#install-dialog'),event)) $('#install-dialog').close(); });
 $('#install-confirm').addEventListener('click',()=>$('#install-app').click());
 updateInstallButton();
 if (location.protocol !== 'file:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
