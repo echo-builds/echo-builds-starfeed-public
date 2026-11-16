@@ -3,7 +3,7 @@ const {getSession,refreshSession,setSession} = require('./_lib/session');
 const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
-const MAX_CANDIDATES = 18;
+const MAX_CANDIDATES = 24;
 
 function jsonFrom(text) {
   const source = String(text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
@@ -67,6 +67,28 @@ function capabilityChecks(values) {
   }).filter(Boolean).slice(0,8);
 }
 
+function focusedTerm(value) {
+  const tokens = [...tokenSet(value)].filter(token=>token.length > 2);
+  return tokens.slice(-2).join(' ');
+}
+
+function complementaryQueries(plan) {
+  const queries = [...(Array.isArray(plan?.queries) ? plan.queries : [])];
+  const checks = (Array.isArray(plan?.capability_checks) ? plan.capability_checks : []).filter(check=>check?.name);
+  const frequencies = new Map();
+  for (const check of checks) for (const token of tokenSet(check.name)) frequencies.set(token,(frequencies.get(token) || 0) + 1);
+  const anchor = [...frequencies.entries()].sort((a,b)=>b[1]-a[1] || b[0].length-a[0].length).find(([,count])=>count > 1)?.[0] || '';
+  for (let left = 0; left < checks.length; left++) {
+    for (let right = left + 1; right < checks.length; right++) {
+      const leftTerms = unique(checks[left].evidence_terms,8).map(focusedTerm).filter(Boolean).sort((a,b)=>a.split(' ').length-b.split(' ').length);
+      const rightTerms = unique(checks[right].evidence_terms,8).map(focusedTerm).filter(Boolean).sort((a,b)=>a.split(' ').length-b.split(' ').length);
+      if (leftTerms[0] && rightTerms[0]) queries.unshift(clean(`${anchor} ${leftTerms[0]} ${rightTerms[0]}`,120));
+      if (leftTerms[0] && rightTerms.at(-1)) queries.unshift(clean(`${anchor} ${leftTerms[0]} ${rightTerms.at(-1)}`,120));
+    }
+  }
+  return unique(queries,7);
+}
+
 function fallbackPlan(input) {
   const normalized = clean(input,220);
   const fragments = normalized
@@ -95,7 +117,7 @@ async function planSearch(req,input) {
     const queries = unique(plan.queries ?? plan.search_queries ?? plan.github_queries ?? plan.search_strategies ?? plan.strategies,5);
     if (!queries.length) throw new Error('empty_queries');
     const checks = capabilityChecks(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves);
-    return {
+    const shaped = {
       intent:clean(plan.intent) || input,
       goal:clean(plan.goal) || clean(plan.intent) || input,
       core_capabilities:checks.map(item=>item.name),
@@ -104,6 +126,8 @@ async function planSearch(req,input) {
       queries,
       mode:'ai'
     };
+    shaped.queries = complementaryQueries(shaped);
+    return shaped;
   } catch (error) {
     return {...fallbackPlan(input),aiFallbackReason:String(error?.message || 'ai_unavailable').slice(0,80)};
   }
@@ -129,25 +153,65 @@ async function githubSearch(query,token) {
   return Array.isArray(data.items) ? data.items : [];
 }
 
-async function readmeExcerpt(item) {
+function markdownText(value) {
+  return String(value || '')
+    .replace(/```[\s\S]*?```/g,' ')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g,' ')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
+    .replace(/[#>*_`|~]/g,' ');
+}
+
+function evidenceCoverage(value,checks) {
+  const source = new Set([...tokenSet(value)].map(stemToken));
+  let matchedGroups = 0;
+  let matchedTerms = 0;
+  for (const check of Array.isArray(checks) ? checks : []) {
+    let groupMatched = false;
+    for (const term of Array.isArray(check?.evidence_terms) ? check.evidence_terms : []) {
+      const terms = [...tokenSet(term)].map(stemToken);
+      if (!terms.length) continue;
+      const matched = terms.filter(token=>source.has(token)).length;
+      if (matched >= Math.max(1,Math.ceil(terms.length * .66))) {
+        groupMatched = true;
+        matchedTerms += matched;
+      }
+    }
+    if (groupMatched) matchedGroups++;
+  }
+  return matchedGroups * 10 + matchedTerms;
+}
+
+function selectReadmeExcerpt(raw,checks) {
+  const paragraphs = markdownText(raw).split(/\n\s*\n|\r?\n(?=\s*[-+•]|\s*\d+[.)]\s)/)
+    .map(value=>clean(value,700)).filter(value=>value.length >= 20);
+  if (!paragraphs.length) return '';
+  const scored = paragraphs.map((value,index)=>({value,index,score:evidenceCoverage(value,checks)}));
+  const selected = new Map();
+  for (const entry of scored.slice(0,2)) selected.set(entry.index,entry.value);
+  for (const entry of scored.sort((a,b)=>b.score-a.score || a.index-b.index).slice(0,8)) if (entry.score > 0) selected.set(entry.index,entry.value);
+  return clean([...selected.entries()].sort((a,b)=>a[0]-b[0]).map(([,value])=>value).join(' '),3200);
+}
+
+async function readmeExcerpt(item,checks) {
   const branch = encodeURIComponent(item.default_branch || 'main');
   const path = String(item.full_name || '').split('/').map(encodeURIComponent).join('/');
   if (!path.includes('/')) return '';
   try {
     const response = await fetch(`https://raw.githubusercontent.com/${path}/${branch}/README.md`,{signal:AbortSignal.timeout(6000)});
     if (!response.ok) return '';
-    return clean(String(await response.text()).replace(/```[\s\S]*?```/g,' ').replace(/<[^>]+>/g,' ').replace(/!\[[^\]]*\]\([^)]*\)/g,' ').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[#>*_`|~-]/g,' '),1800);
+    return selectReadmeExcerpt(await response.text(),checks);
   } catch { return ''; }
 }
 
-async function withReadmes(items) {
-  const excerpts = await Promise.all(items.map(readmeExcerpt));
+async function withReadmes(items,checks) {
+  const excerpts = await Promise.all(items.map(item=>readmeExcerpt(item,checks)));
   return items.map((item,index)=>({...item,readme_excerpt:excerpts[index]}));
 }
 
 function tokenSet(value) {
-  const text = String(value || '').toLowerCase();
-  const words = text.match(/[a-z0-9][a-z0-9.+#-]{1,}|[㐀-鿿]{2,8}/gu) || [];
+  const text = String(value || '').toLowerCase().replace(/[-_/]+/g,' ');
+  const words = text.match(/[a-z0-9][a-z0-9.+#]{1,}|[㐀-鿿]{2,8}/gu) || [];
   const ignored = new Set(['github','repo','repository','project','projects','open','source','tool','tools','一个','项目','工具','可以','支持','需要','希望']);
   return new Set(words.filter(word=>!ignored.has(word)));
 }
@@ -155,7 +219,13 @@ function tokenSet(value) {
 function stemToken(value) {
   const token = String(value || '').toLowerCase();
   if (token.length <= 4) return token;
-  return token.replace(/(?:ing|ed|es|s)$/,'');
+  if (/cing$/.test(token)) return token.slice(0,-3) + 'e';
+  if (/ing$/.test(token)) return token.slice(0,-3).replace(/(.)\1$/,'$1');
+  if (/ies$/.test(token)) return token.slice(0,-3) + 'y';
+  if (/ed$/.test(token)) return token.slice(0,-2).replace(/(.)\1$/,'$1');
+  if (/es$/.test(token)) return token.slice(0,-2);
+  if (/s$/.test(token)) return token.slice(0,-1);
+  return token;
 }
 
 function capabilityEvidenceSupported(item,checks) {
@@ -166,7 +236,7 @@ function capabilityEvidenceSupported(item,checks) {
     const tokens = [...tokenSet(term)].map(stemToken);
     if (!tokens.length) return false;
     const matched = tokens.filter(token=>sourceTokens.has(token)).length;
-    return matched >= Math.ceil(tokens.length * .75);
+    return matched >= Math.max(1,Math.ceil(tokens.length * .66));
   }));
 }
 
@@ -251,7 +321,7 @@ function fallbackRank(plan,items) {
 async function rankAndDescribe(req,input,plan,items) {
   const eligible = items.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks));
   if (!eligible.length) return [];
-  const candidates = eligible.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:clean(item.readme_excerpt,900)}));
+  const candidates = eligible.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:clean(item.readme_excerpt,1400)}));
   let result;
   try {
     result = await askModel(req,[
@@ -327,11 +397,13 @@ module.exports = async function handler(req,res) {
     for (const item of remainder) if (diversified.size < MAX_CANDIDATES) diversified.set(item.full_name.toLowerCase(),item);
     const candidates = [...diversified.values()].slice(0,MAX_CANDIDATES);
     if (!candidates.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
-    const items = await rankAndDescribe(req,input,plan,await withReadmes(candidates));
-    return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:plan.queries,diagnostic:plan.aiFallbackReason || null,items});
+    const hydrated = await withReadmes(candidates,plan.capability_checks);
+    const eligibleCount = hydrated.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks)).length;
+    const items = await rankAndDescribe(req,input,plan,hydrated);
+    return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:plan.queries,diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,returned:items.length},items});
   } catch (error) {
     return res.status(502).json({error:'search_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,evidenceSupported,fallbackPlan,fallbackRank,listText,metadataQuality,popularityScore,tokenSet,unique};
+module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,listText,metadataQuality,popularityScore,selectReadmeExcerpt,stemToken,tokenSet,unique};
