@@ -3,6 +3,11 @@ const {getSession,refreshSession,setSession} = require('./_lib/session');
 const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
+const TTS_QUERIES = ['TTS','text-to-speech','speech synthesis'];
+
+function isTtsRequest(input) {
+  return /配音|语音合成|文字转语音|文本转语音|text.?to.?speech|\btts\b/i.test(input);
+}
 
 function jsonFrom(text) {
   const source = String(text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
@@ -59,10 +64,10 @@ const rules = [
 ];
 
 function fallbackPlan(input) {
-  if (/配音|语音合成|文字转语音|文本转语音|text.?to.?speech|\btts\b/i.test(input)) {
+  if (isTtsRequest(input)) {
     return {
       intent:/中文/.test(input) ? '把中文文本转换成自然、接近真人表达的配音' : '把文本转换成自然、接近真人表达的配音',
-      queries:['Mandarin text-to-speech','expressive TTS prosody','multi-speaker dialogue TTS','podcast dubbing voice cloning','Chinese TTS'],
+      queries:[...TTS_QUERIES,'multi-speaker TTS','voice cloning'],
       mode:'rules'
     };
   }
@@ -84,7 +89,9 @@ async function planSearch(req,input) {
       {role:'system',content:'你把中文或英文自然语言需求转换成 GitHub 仓库检索方案。只输出 JSON：{"intent":"一句中文意图概括","queries":["英文 GitHub 搜索词"]}。先判断用户最终想得到的输出和核心能力，不要机械逐字翻译。queries 给出 3-5 个互补召回，每条只保留 1-3 个核心概念或常见项目术语；用同义词和不同使用场景拆成不同查询，不要把所有条件 AND 在同一条查询里。主观质量词（如自然、去 AI 感、好用）不要直接作为搜索词，应转成 README 可核验的能力，例如 prosody、pause control、emotion instruction、multi-speaker、voice cloning、demo。已知品牌名不能作为首轮搜索词。可以包含 language:、topic:、stars:，但不要包含 sort:、order:、fork:、archived:。例如“中文配音，去 AI 感”应分别召回 Mandarin text-to-speech、expressive TTS prosody、multi-speaker dialogue TTS、podcast dubbing，而不是 translation audio。'},
       {role:'user',content:JSON.stringify({request:input})}
     ]);
-    const queries = (Array.isArray(plan.queries) ? plan.queries : []).map(cleanQuery).filter(Boolean).slice(0,5);
+    let queries = (Array.isArray(plan.queries) ? plan.queries : []).map(cleanQuery).filter(Boolean);
+    if (isTtsRequest(input)) queries = [...TTS_QUERIES,...queries];
+    queries = [...new Set(queries)].slice(0,5);
     if (!queries.length) throw new Error('empty_queries');
     return {intent:cleanQuery(plan.intent) || input,queries,mode:'ai'};
   } catch (error) {
@@ -126,7 +133,7 @@ async function readmeExcerpt(item) {
   try {
     const response = await fetch(`https://raw.githubusercontent.com/${path}/${branch}/README.md`,{signal:AbortSignal.timeout(5000)});
     if (!response.ok) return '';
-    return cleanQuery((await response.text()).replace(/<[^>]+>/g,' ').replace(/!\[[^\]]*\]\([^)]*\)/g,' ')).slice(0,1800);
+    return cleanQuery((await response.text()).replace(/<[^>]+>/g,' ').replace(/!\[[^\]]*\]\([^)]*\)/g,' ')).slice(0,1200);
   } catch { return ''; }
 }
 
@@ -136,7 +143,7 @@ async function withReadmes(items) {
 }
 
 function fallbackRank(input,items) {
-  const wantsTts = /配音|语音合成|文字转语音|文本转语音|text.?to.?speech|\btts\b/i.test(input);
+  const wantsTts = isTtsRequest(input);
   return items.flatMap(item=>{
     const text = `${item.full_name} ${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`.toLowerCase();
     let relevance = 58;
@@ -146,7 +153,8 @@ function fallbackRank(input,items) {
       if (!matches || wrongDirection) return [];
       relevance = 76 + (/chinese|mandarin|中文|multilingual/.test(text) ? 8 : 0) + (/expressive|emotion|prosody|pause|natural|multi.?speaker|voice clon|demo/.test(text) ? 7 : 0);
     }
-    const rank = relevance + Math.min(25,Math.log10(Math.max(1,Number(item.stargazers_count || 0))) * 5);
+    const evidence = wantsTts ? (/chinese|mandarin|中文/.test(text) ? 5 : 0) + (/expressive|emotion|prosody|pause|duration control|instruction/.test(text) ? 7 : 0) + (/multi.?speaker|dialogue|podcast/.test(text) ? 5 : 0) + (/demo|audio sample|试听/.test(text) ? 3 : 0) : 0;
+    const rank = relevance + evidence + Math.min(18,Math.log10(Math.max(1,Number(item.stargazers_count || 0))) * 3.6);
     const {readme_excerpt,...repo} = item;
     return [{...repo,relevance_score:relevance,rank_score:rank}];
   }).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
@@ -170,7 +178,9 @@ async function rankAndDescribe(req,input,items) {
     const text = copy.get(String(item.full_name).toLowerCase());
     const relevance = Math.max(0,Math.min(100,Number(text?.relevance_score || 0)));
     if (!text || text.relevant === false || relevance < 62) return [];
-    const rank = relevance + Math.min(25,Math.log10(Math.max(1,Number(item.stargazers_count || 0))) * 5);
+    const source = `${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`.toLowerCase();
+    const ttsEvidence = isTtsRequest(input) ? (/chinese|mandarin|中文/.test(source) ? 5 : 0) + (/expressive|emotion|prosody|pause|duration control|instruction/.test(source) ? 7 : 0) + (/multi.?speaker|dialogue|podcast/.test(source) ? 5 : 0) + (/demo|audio sample|试听/.test(source) ? 3 : 0) : 0;
+    const rank = relevance + ttsEvidence + Math.min(18,Math.log10(Math.max(1,Number(item.stargazers_count || 0))) * 3.6);
     const {readme_excerpt,...repo} = item;
     return [{...repo,relevance_score:relevance,rank_score:rank,ai_title:cleanQuery(text.title).slice(0,44),ai_summary:cleanQuery(text.summary).slice(0,160),ai_bullets:(Array.isArray(text.bullets) ? text.bullets : []).map(cleanQuery).filter(Boolean).slice(0,3)}];
   }).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
@@ -228,7 +238,7 @@ module.exports = async function handler(req,res) {
     for (const batch of batches) if (batch.status === 'fulfilled') {
       for (const item of batch.value) if (item?.full_name && !item.archived && !item.fork) merged.set(item.full_name.toLowerCase(),shape(item));
     }
-    let items = [...merged.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,32);
+    let items = [...merged.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,40);
     if (!items.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     items = await rankAndDescribe(req,input,await withReadmes(items));
     return res.status(200).json({mode:plan.mode,intent:plan.intent,queries:plan.queries,diagnostic:plan.aiFallbackReason || null,items});
