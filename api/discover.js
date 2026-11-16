@@ -90,7 +90,8 @@ function readmeImages(markdown,repo) {
   for (const match of markdown.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) found.push(match[1]);
   const filtered = [...new Set(found.map(value=>resolveAsset(value,repo)).filter(Boolean))].filter(url=>
     !/shields\.io|badge|badgen|license|coverage|actions\/workflows|social|logo(?:\.|\/)|icon(?:\.|\/)|star-history|trendshift|avatars\.githubusercontent|github\.com\/.+\.svg/i.test(url) &&
-    !/\.svg(?:\?|$)/i.test(url));
+    !/\.svg(?:\?|$)/i.test(url) &&
+    /(screenshot|screen[-_.\/]|preview|demo|showcase|interface|ui[-_.\/]|app[-_.\/]|chat[-_.\/]|dashboard|workflow|hero|usage|example|product|cover|\.gif(?:\?|$))/i.test(url));
   return filtered.sort((a,b)=>Number(/screenshot|preview|demo|showcase|interface|ui[-_.\/]/i.test(b))-Number(/screenshot|preview|demo|showcase|interface|ui[-_.\/]/i.test(a)));
 }
 
@@ -173,7 +174,7 @@ module.exports = async function handler(req,res) {
       return {...item,readme,cover:readmeImages(readme,item.repo)[0] || null};
     }));
     const decisions = await classify(req,enriched);
-    const items = enriched.flatMap(item=>{
+    const scored = enriched.flatMap(item=>{
       const key = item.repo.full_name.toLowerCase();
       const hasDecision = decisions.has(key);
       const decision = decisions.get(key) || fallbackCopy(item.repo,item.kind,item.release);
@@ -182,8 +183,16 @@ module.exports = async function handler(req,res) {
       const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
       const freshness = Math.max(0,90 - Math.max(0,(now - Date.parse(freshnessDate || 0)) / DAY));
       const heat = Math.log10(Math.max(10,item.repo.stargazers_count || 0)) * 20 + freshness + Number(decision.quality_score || 0) * .35;
-      return [{...item.repo,cover:item.cover,ai_title:clean(decision.title,60) || item.repo.name,ai_summary:clean(decision.summary,180) || clean(item.repo.description,180),selection_reason:clean(decision.selection_reason,48) || (item.kind === 'new' ? '近期新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`),release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name} : null,quality_score:Number(decision.quality_score || 0),heat_score:heat}];
-    }).sort((a,b)=>b.heat_score-a.heat_score).slice(0,24);
+      return [{...item.repo,cover:item.cover,ai_title:clean(decision.title,60) || item.repo.name,ai_summary:clean(decision.summary,180) || clean(item.repo.description,180),selection_reason:item.kind === 'new' ? '近期新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name} : null,quality_score:Number(decision.quality_score || 0),heat_score:heat,candidate_kind:item.kind}];
+    });
+    const newItems = scored.filter(item=>item.candidate_kind === 'new').sort((a,b)=>b.heat_score-a.heat_score);
+    const releaseItems = scored.filter(item=>item.candidate_kind === 'release').sort((a,b)=>b.heat_score-a.heat_score);
+    const items = [];
+    while (items.length < 24 && (newItems.length || releaseItems.length)) {
+      for (let index = 0; index < 2 && newItems.length && items.length < 24; index++) items.push(newItems.shift());
+      if (releaseItems.length && items.length < 24) items.push(releaseItems.shift());
+    }
+    for (const item of items) delete item.candidate_kind;
 
     return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'new_or_recent_release',classifier:decisions.size ? 'ai' : 'fallback'});
   } catch (error) {
