@@ -109,6 +109,11 @@ test('用户未要求资源列表时识别并排除合集候选',()=>{
   assert.equal(search.wantsCollection({intent:'整理安全工具合集',goal:'找到资源列表'}),true);
 });
 
+test('AI 规划降级时证据必须覆盖原始需求而非只命中相邻能力',()=>{
+  assert.equal(search.requestEvidenceSupported('把网页操作录制成可重复执行的自动化流程',['Android 录制回放和桌面控制']),false);
+  assert.equal(search.requestEvidenceSupported('本地知识库检索 PDF 并回答问题',['本地部署的个人知识库，支持 PDF 文档检索并回答问题']),true);
+});
+
 test('通用排序把匹配证据放在纯 Star 之前',()=>{
   const plan = {goal:'agent evaluation tracing',intent:'评测 Agent 并追踪调用',core_capabilities:['evaluation','tracing'],constraints:[],queries:['agent evaluation tracing']};
   const items = [
