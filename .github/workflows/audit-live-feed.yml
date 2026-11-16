@@ -43,6 +43,7 @@ jobs:
           const body = await response.text();
           console.log("HTTP status:", response.status);
           console.log("Content type:", response.headers.get("content-type"));
+          console.log("Deployment diagnostics included:", Boolean(JSON.parse(body).diagnostics));
           let payload;
           try { payload = JSON.parse(body); }
           catch { throw new Error("Invalid JSON response: " + body.slice(0,400)); }
@@ -65,6 +66,7 @@ jobs:
           console.log(JSON.stringify({
             count:payload.items.length,
             classifier:payload.classifier,
+            diagnostics:payload.diagnostics,
             method:payload.method,
             page:payload.page,
             items:records
