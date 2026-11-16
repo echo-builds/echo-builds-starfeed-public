@@ -12,5 +12,6 @@ module.exports = function handler(req,res) {
   authorize.searchParams.set('client_id',process.env.GITHUB_CLIENT_ID);
   authorize.searchParams.set('redirect_uri',redirectUri);
   authorize.searchParams.set('state',state);
+  authorize.searchParams.set('scope','public_repo');
   res.redirect(302,authorize.toString());
 };
