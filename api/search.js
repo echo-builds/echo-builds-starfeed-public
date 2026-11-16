@@ -226,13 +226,23 @@ function stemToken(value) {
 function capabilityEvidenceSupported(item,checks) {
   const required = (Array.isArray(checks) ? checks : []).filter(check=>Array.isArray(check?.evidence_terms) && check.evidence_terms.length);
   if (!required.length) return true;
-  const sourceTokens = new Set([...tokenSet(`${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`)].map(stemToken));
+  return capabilityEvidenceSupportedInText(`${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`,required);
+}
+
+function capabilityEvidenceSupportedInText(sourceText,checks) {
+  const required = (Array.isArray(checks) ? checks : []).filter(check=>Array.isArray(check?.evidence_terms) && check.evidence_terms.length);
+  if (!required.length) return true;
+  const sourceTokens = new Set([...tokenSet(sourceText)].map(stemToken));
   return required.every(check=>check.evidence_terms.some(term=>{
     const tokens = [...tokenSet(term)].map(stemToken);
     if (!tokens.length) return false;
     const matched = tokens.filter(token=>sourceTokens.has(token)).length;
     return matched >= Math.max(1,Math.ceil(tokens.length * .66));
   }));
+}
+
+function primaryCapabilityEvidenceSupported(item,checks) {
+  return capabilityEvidenceSupportedInText(`${item.full_name || ''} ${item.description || ''} ${(item.topics || []).join(' ')}`,checks);
 }
 
 function activityScore(item) {
@@ -322,10 +332,22 @@ function isCollectionCandidate(item) {
   return /^awesome[-_]/i.test(item.name || '') || /curated (?:list|collection)|awesome list|collection of (?:tools|projects|resources)|resources? list/i.test(`${item.description || ''} ${String(item.readme_excerpt || '').slice(0,500)}`);
 }
 
+function wantsInstructional(plan,input = '') {
+  return /教程|课程|学习资料|示例项目|教学|tutorial|course|learn|guide|example project/i.test(`${input} ${plan?.intent || ''} ${plan?.goal || ''}`);
+}
+
+function isInstructionalCandidate(item) {
+  return /(?:^|[-_])(course|tutorial|workshop|learning|learn|examples?|starter[-_]?kit)(?:$|[-_])/i.test(item.name || '') || /\b(?:course|tutorial|workshop|learning resource|educational content|step-by-step guide)\b/i.test(item.description || '');
+}
+
 function fallbackRank(plan,items) {
   const needTokens = tokenSet([plan.goal,plan.intent,...plan.core_capabilities,...plan.constraints,...plan.queries].join(' '));
   const queryTokenSets = plan.queries.map(tokenSet).filter(tokens=>tokens.size);
-  return items.map(item=>{
+  return items.filter(item=>
+    primaryCapabilityEvidenceSupported(item,plan.capability_checks) &&
+    (wantsCollection(plan) || !isCollectionCandidate(item)) &&
+    (wantsInstructional(plan) || !isInstructionalCandidate(item))
+  ).map(item=>{
     const primary = `${item.full_name} ${item.description || ''} ${(item.topics || []).join(' ')}`;
     const source = `${primary} ${item.readme_excerpt || ''}`;
     const primaryTokens = tokenSet(primary);
@@ -353,12 +375,16 @@ function fallbackRank(plan,items) {
     const {readme_excerpt,...repo} = item;
     const original = clean(item.description,150);
     const chinese = /[㐀-鿿]/.test(original);
-    return {...repo,relevance_score:relevance,quality_score:quality,rank_score:rank,ai_title:item.name,ai_summary:chinese ? original : (original ? `仓库原始说明：${original}` : '该候选项目缺少可核验的仓库简介，请进入 README 确认具体能力。'),ai_bullets:[]};
+    return {...repo,relevance_score:relevance,quality_score:quality,rank_score:rank,assessment_mode:'fallback',ai_title:item.name,ai_summary:chinese ? original : (original ? `仓库原始说明：${original}` : '该候选项目缺少可核验的仓库简介，请进入 README 确认具体能力。'),ai_bullets:[]};
   }).filter(item=>item.relevance_score >= 52).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,10);
 }
 
 async function rankAndDescribe(req,input,plan,items) {
-  const eligible = items.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks) && (wantsCollection(plan,input) || !isCollectionCandidate(item)));
+  const eligible = items.filter(item=>
+    capabilityEvidenceSupported(item,plan.capability_checks) &&
+    (wantsCollection(plan,input) || !isCollectionCandidate(item)) &&
+    (wantsInstructional(plan,input) || !isInstructionalCandidate(item))
+  );
   if (!eligible.length) return [];
   const candidates = eligible.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:clean(item.readme_excerpt,1400)}));
   let result;
@@ -384,7 +410,7 @@ async function rankAndDescribe(req,input,plan,items) {
     if (!decision || decision.relevant === false || relevance < 60 || evidence < 35 || !evidenceSupported(item,evidenceQuotes) || !capabilityClaimsSupported(item,requiredChecks,capabilityEvidence) || !fallbackEvidence) return [];
     const rank = relevance * .72 + evidence * .12 + quality * .08 + activityScore(item) * .04 + popularityScore(item) * .04;
     const {readme_excerpt,...repo} = item;
-    return [{...repo,relevance_score:relevance,evidence_score:evidence,quality_score:quality,rank_score:rank,ai_title:clean(decision.title,60) || item.name,ai_summary:clean(decision.summary,180),ai_bullets:unique(Array.isArray(decision.bullets) ? decision.bullets : [],2),evidence_quotes:evidenceQuotes}];
+    return [{...repo,relevance_score:relevance,evidence_score:evidence,quality_score:quality,rank_score:rank,assessment_mode:'ai',ai_title:clean(decision.title,60) || item.name,ai_summary:clean(decision.summary,180),ai_bullets:unique(Array.isArray(decision.bullets) ? decision.bullets : [],2),evidence_quotes:evidenceQuotes}];
   }).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
 }
 
@@ -444,7 +470,11 @@ module.exports = async function handler(req,res) {
     const candidates = [...diversified.values()].slice(0,MAX_CANDIDATES);
     if (!candidates.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     const hydrated = await withReadmes(candidates,plan.capability_checks);
-    const eligibleCount = hydrated.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks) && (wantsCollection(plan,input) || !isCollectionCandidate(item))).length;
+    const eligibleCount = hydrated.filter(item=>
+      capabilityEvidenceSupported(item,plan.capability_checks) &&
+      (wantsCollection(plan,input) || !isCollectionCandidate(item)) &&
+      (wantsInstructional(plan,input) || !isInstructionalCandidate(item))
+    ).length;
     const items = await rankAndDescribe(req,input,plan,hydrated);
     return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:plan.queries,diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,returned:items.length},items});
   } catch (error) {
@@ -452,4 +482,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,isCollectionCandidate,listText,meaningUnits,metadataQuality,popularityScore,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,tokenSet,unique,wantsCollection};
+module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,popularityScore,primaryCapabilityEvidenceSupported,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,tokenSet,unique,wantsCollection,wantsInstructional};
