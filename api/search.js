@@ -122,7 +122,7 @@ async function githubSearch(query,token) {
   const cleaned = clean(query,220);
   const scope = /\bin:/.test(cleaned) ? '' : ' in:name,description,readme,topics';
   const q = `${cleaned}${scope} archived:false fork:false`;
-  const params = new URLSearchParams({q,sort:'stars',order:'desc',per_page:'35'});
+  const params = new URLSearchParams({q,per_page:'35'});
   const response = await fetch(`${GITHUB_API}/search/repositories?${params}`,{headers:githubHeaders(token),signal:AbortSignal.timeout(12000)});
   if (!response.ok) throw new Error('github_' + response.status);
   const data = await response.json();
@@ -321,7 +321,7 @@ module.exports = async function handler(req,res) {
     const diversified = new Map();
     for (const batch of batches) if (batch.status === 'fulfilled') {
       for (const item of batch.value) if (item?.full_name && !item.archived && !item.fork) all.set(item.full_name.toLowerCase(),shape(item));
-      for (const item of batch.value.slice(0,6)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
+      for (const item of batch.value.slice(0,8)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
     }
     const remainder = [...all.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
     for (const item of remainder) if (diversified.size < MAX_CANDIDATES) diversified.set(item.full_name.toLowerCase(),item);
