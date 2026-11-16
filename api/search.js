@@ -24,6 +24,7 @@ async function askModel(req,messages,maxTokens = 900) {
     headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
     body:JSON.stringify({
       model:SEARCH_MODEL,
+      reasoning:{effort:'none'},
       temperature:0.1,
       max_tokens:maxTokens,
       messages
