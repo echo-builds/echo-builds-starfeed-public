@@ -293,26 +293,37 @@ module.exports = async function handler(req,res) {
     });
 
     let classifierMode = aiClassified ? 'ai' : 'fallback';
-    if (!scored.length && aiClassified) {
-      classifierMode = 'strict_fallback_after_ai';
-      scored = enriched.flatMap(item=>{
-        // An explicit AI rejection must remain rejected. Only unreviewed items
-        // or positive classifications with unusable evidence may fall back.
-        const reviewed = decisions.get(item.repo.full_name.toLowerCase());
-        if (reviewed?.relevant === false) return [];
+    // A truncated AI response should not leave the home feed almost empty.
+    // Backfill only when there are fewer than eight accepted projects, using
+    // direct AI/Agent/model signals in primary repository metadata. Never
+    // reinstate a repository the AI explicitly marked irrelevant.
+    if (aiClassified && scored.length < 8) {
+      const included = new Set(scored.map(item=>item.full_name.toLowerCase()));
+      const additions = enriched.flatMap(item=>{
+        const key = item.repo.full_name.toLowerCase();
+        const decision = decisions.get(key);
+        if (included.has(key) || decision?.relevant === false) return [];
+        // If any AI item survived, do not override its rejection-by-evidence.
+        // Only candidates omitted by an incomplete model response are eligible.
+        if (scored.length > 0 && decision) return [];
         const fallback = fallbackCopy(item.repo,item.kind,item.release,item.readme,item.cover);
-        if (!fallback.relevant || fallback.quality_score < 55) return [];
+        if (!fallback.relevant || fallback.quality_score < 62) return [];
         const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
         const freshness = freshnessScore(freshnessDate,item.kind === 'new' ? 90 : 45);
         const momentum = item.kind === 'new' ? momentumScore(item.repo) : 0;
-        const heat = fallback.attention_score * .42 + fallback.quality_score * .2 + freshness * .16 + popularityScore(item.repo.stargazers_count) * .12 + momentum * .1;
+        const heat = fallback.attention_score * .42 + fallback.quality_score * .2 +
+          freshness * .16 + popularityScore(item.repo.stargazers_count) * .12 + momentum * .1;
         return [{
           ...item.repo,
           cover:item.cover,
           ai_title:item.repo.name,
           ai_summary:fallback.summary,
-          selection_reason:item.kind === 'new' ? '近期高星新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,
-          release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url,has_assets:Array.isArray(item.release.assets) && item.release.assets.length > 0} : null,
+          selection_reason:item.kind === 'new' ? '近期高星新项目' : `近期发布 ${item.release?.tag_name || '新版本'}`,
+          release:item.release ? {
+            tag_name:item.release.tag_name,published_at:item.release.published_at,
+            name:item.release.name,html_url:item.release.html_url,
+            has_assets:Array.isArray(item.release.assets) && item.release.assets.length > 0
+          } : null,
           attention_category:fallback.attention_category,
           attention_score:fallback.attention_score,
           quality_score:fallback.quality_score,
@@ -320,7 +331,13 @@ module.exports = async function handler(req,res) {
           heat_score:heat,
           candidate_kind:item.kind
         }];
-      });
+      }).sort((a,b)=>b.heat_score-a.heat_score);
+      const wasEmpty = scored.length === 0;
+      const selected = additions.slice(0,8-scored.length);
+      if (selected.length) {
+        scored.push(...selected);
+        classifierMode = wasEmpty ? 'strict_fallback_after_ai' : 'ai_partial_strict_fallback';
+      }
     }
 
     const newItems = scored.filter(item=>item.candidate_kind === 'new').sort((a,b)=>b.heat_score-a.heat_score);
