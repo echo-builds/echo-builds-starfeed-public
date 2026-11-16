@@ -93,6 +93,22 @@ test('排序结果必须为每项核心能力提供可回查证据',()=>{
   assert.equal(search.capabilityClaimsSupported(item,['Agent 可靠性评测','工具调用追踪'],claims.slice(0,1)),false);
 });
 
+test('能力证据名称轻微变化时按内容匹配而不是整批误杀',()=>{
+  const item = {description:'Mobile inference runtime with offline execution',topics:['on-device-ai'],readme_excerpt:'Run models locally on Android and iOS.'};
+  const claims = [
+    {capability:'移动端模型推理',evidence_quote:'Mobile inference runtime'},
+    {capability:'本地离线执行',evidence_quote:'Run models locally'}
+  ];
+  assert.equal(search.capabilityClaimsSupported(item,['移动端推理','离线运行'],claims),true);
+});
+
+test('用户未要求资源列表时识别并排除合集候选',()=>{
+  const collection = {name:'awesome-mlsecops',description:'A curated list of machine learning security tools',readme_excerpt:'Collection of tools and resources.'};
+  assert.equal(search.isCollectionCandidate(collection),true);
+  assert.equal(search.wantsCollection({intent:'检测提示词注入',goal:'找到检测工具'}),false);
+  assert.equal(search.wantsCollection({intent:'整理安全工具合集',goal:'找到资源列表'}),true);
+});
+
 test('通用排序把匹配证据放在纯 Star 之前',()=>{
   const plan = {goal:'agent evaluation tracing',intent:'评测 Agent 并追踪调用',core_capabilities:['evaluation','tracing'],constraints:[],queries:['agent evaluation tracing']};
   const items = [
