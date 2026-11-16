@@ -30,6 +30,7 @@ test('通用降级计划可处理十类需求且不注入固定领域查询',()=
 
 test('兼容模型把检索词返回成对象数组',()=>{
   assert.deepEqual(search.unique([{query:'agent evaluation'},{terms:['tool','tracing']},{value:'self hosted'}],5),['agent evaluation','tool tracing','self hosted']);
+  assert.deepEqual(search.unique({primary:{search_query:'agent evaluation'},secondary:{keywords:['tool','tracing']}},5),['agent evaluation','tool tracing']);
   assert.equal(search.listText({purpose:'missing query'}),'');
 });
 
