@@ -41,6 +41,17 @@ test('入选能力必须能回查到仓库资料中的逐字证据',()=>{
   assert.equal(search.evidenceSupported(item,[]),false);
 });
 
+test('候选必须逐项命中核心能力的可核验术语',()=>{
+  const checks = search.capabilityChecks([
+    {name:'Agent 评测',evidence_terms:['agent evaluation','agent evals']},
+    {name:'工具调用追踪',evidence_terms:['tool call tracing','trace tool calls']}
+  ]);
+  const complete = {description:'Agent evaluation platform',topics:['tool-call-tracing'],readme_excerpt:'Trace tool calls and compare agent runs.'};
+  const incomplete = {description:'Reliable web data for AI agents',topics:['benchmark'],readme_excerpt:'Clean data for better decisions.'};
+  assert.equal(search.capabilityEvidenceSupported(complete,checks),true);
+  assert.equal(search.capabilityEvidenceSupported(incomplete,checks),false);
+});
+
 test('通用排序把匹配证据放在纯 Star 之前',()=>{
   const plan = {goal:'agent evaluation tracing',intent:'评测 Agent 并追踪调用',core_capabilities:['evaluation','tracing'],constraints:[],queries:['agent evaluation tracing']};
   const items = [
