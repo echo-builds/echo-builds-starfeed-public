@@ -655,7 +655,7 @@ async function loadDiscover({reset = false} = {}) {
   const cursor = Number(state.discoveryCursor || 1);
   let incoming = [];
   try {
-    const response = await fetch('/api/discover?page=' + cursor + '&quality=3',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
+    const response = await fetch('/api/discover?page=' + cursor + '&quality=4',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
     if (!response.ok) throw new Error('Discover HTTP ' + response.status);
     const data = await response.json();
     incoming = (Array.isArray(data?.items) ? data.items : []).map(shape).filter(preparedCopy);
