@@ -119,6 +119,10 @@ function isResourceCollection(repo) {
   return /^awesome[-_]/i.test(repo.name || '') || /curated (?:list|collection)|awesome list|collection of (?:tools|projects|resources)|resources? list/i.test(repo.description || '');
 }
 
+function conservativeDecisionSupported(repo,decision) {
+  return Boolean(decision && decision.relevant !== false && directAttentionSignal(repo) > 0 && !isResourceCollection(repo));
+}
+
 function metadataQuality(repo,readme,cover) {
   let score = 24;
   if (repo.description) score += 14;
@@ -254,9 +258,10 @@ module.exports = async function handler(req,res) {
       const decision = aiClassified ? decisions.get(key) : fallback;
       if (!decision) return [];
       const decisionEvidence = aiClassified ? recommendationEvidenceSupported(item,decision.evidence_quotes) : true;
+      const conservativeDecision = aiClassified && !decisionEvidence && conservativeDecisionSupported(item.repo,decision);
       const attention = Math.max(0,Math.min(100,Number(decision.attention_score || 0)));
       const quality = Math.max(0,Math.min(100,Number(decision.quality_score || fallback.quality_score)));
-      const accepted = aiClassified ? decision.relevant !== false && decisionEvidence && attention >= 62 && quality >= 55 : fallback.relevant && quality >= 55;
+      const accepted = aiClassified ? decision.relevant !== false && (decisionEvidence || conservativeDecision) && attention >= 62 && quality >= 55 : fallback.relevant && quality >= 55;
       if (!accepted) return [];
       const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
       const freshness = freshnessScore(freshnessDate,item.kind === 'new' ? 90 : 45);
@@ -265,14 +270,14 @@ module.exports = async function handler(req,res) {
       return [{
         ...item.repo,
         cover:item.cover,
-        ai_title:clean(decision.title,60) || item.repo.name,
-        ai_summary:clean(decision.summary,180) || fallback.summary,
+        ai_title:decisionEvidence ? (clean(decision.title,60) || item.repo.name) : item.repo.name,
+        ai_summary:decisionEvidence ? (clean(decision.summary,180) || fallback.summary) : fallback.summary,
         selection_reason:item.kind === 'new' ? '近期高星新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,
         release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url,has_assets:Array.isArray(item.release.assets) && item.release.assets.length > 0} : null,
         attention_category:clean(decision.attention_category,40),
         attention_score:attention,
         quality_score:quality,
-        evidence_quotes:aiClassified ? uniqueText(decision.evidence_quotes) : [],
+        evidence_quotes:aiClassified && decisionEvidence ? uniqueText(decision.evidence_quotes) : [],
         heat_score:heat,
         candidate_kind:item.kind
       }];
@@ -293,4 +298,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {attentionSignal,directAttentionSignal,fallbackCopy,fallbackSummary,isResourceCollection,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
+module.exports._test = {attentionSignal,conservativeDecisionSupported,directAttentionSignal,fallbackCopy,fallbackSummary,isResourceCollection,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
