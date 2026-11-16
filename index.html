@@ -963,7 +963,16 @@ function appendExperience(actions,experience) {
 }
 async function hydrateReadme(repo,body,source,actions) {
   try {
-    const response = await fetch('/api/project?repo=' + encodeURIComponent(repo.full_name),{headers:{Accept:'application/json'},signal:AbortSignal.timeout(40000)});
+    let response;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await fetch('/api/project?repo=' + encodeURIComponent(repo.full_name),{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
+        if (response.ok) break;
+      } catch (error) {
+        if (attempt) throw error;
+      }
+      if (!attempt) await new Promise(resolve=>setTimeout(resolve,900));
+    }
     if (!response.ok) throw new Error('Project HTTP ' + response.status);
     const data = await response.json();
     if (!data.readme_markdown) throw new Error('README content unavailable');
@@ -1019,11 +1028,20 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
       try {
         await setGitHubStar(repo,!wasSaved);
         notice.textContent = !wasSaved ? '已收藏，并同步到 GitHub' : '已取消收藏，并同步到 GitHub';
-      } catch {
-        if (wasSaved) state.saved.set(key,repo); else state.saved.delete(key);
-        storage.put('saved',[...state.saved.values()]);
-        updateSave(save,repo);
-        notice.textContent = 'GitHub 同步失败，收藏状态已恢复';
+      } catch (error) {
+        if (error?.needsReconnect) {
+          state.auth = null;
+          renderAccount();
+        }
+        if (wasSaved) {
+          state.saved.set(key,repo);
+          storage.put('saved',[...state.saved.values()]);
+          updateSave(save,repo);
+          notice.textContent = error?.needsReconnect ? 'GitHub 授权需重新连接，暂未取消收藏' : 'GitHub 暂未取消收藏，已保留原状态';
+        } else {
+          if (!state.pendingLocal.some(item=>repoKey(item) === key)) state.pendingLocal.push(repo);
+          notice.textContent = error?.needsReconnect ? '已收藏到 RepoScroll；重新连接 GitHub 后可同步' : '已收藏到 RepoScroll；GitHub 暂未同步';
+        }
       }
     }
   });
@@ -1145,7 +1163,14 @@ async function setGitHubStar(repo,saved) {
   if (response.status === 401) {
     state.auth = null;
     renderAccount();
-    throw new Error('登录已过期');
+    const error = new Error('登录已过期');
+    error.needsReconnect = true;
+    throw error;
+  }
+  if (response.status === 403 || response.status === 404) {
+    const error = new Error('GitHub 授权不足');
+    error.needsReconnect = true;
+    throw error;
   }
   if (!response.ok && response.status !== 204) throw new Error('GitHub HTTP ' + response.status);
 }
@@ -1154,10 +1179,10 @@ async function syncGitHubStars({preserveLocal = true} = {}) {
   const remote = new Map();
   for (let page = 1; page <= 10; page++) {
     const response = await fetch('/api/github/stars?page=' + page,{headers:{Accept:'application/json'}});
-    if (response.status === 401) {
+    if (response.status === 401 || response.status === 403) {
       state.auth = null;
       renderAccount();
-      throw new Error('登录已过期');
+      throw new Error(response.status === 401 ? '登录已过期' : 'GitHub 授权需重新连接');
     }
     if (!response.ok) throw new Error('GitHub HTTP ' + response.status);
     const data = await response.json();
