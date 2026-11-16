@@ -158,9 +158,12 @@ test('推荐价值信号包含技术基础设施而非只认终端产品',()=>{
 
 test('推荐降级不会仅因 audio、video、design 等宽泛词收入普通工具',()=>{
   assert.equal(discover.directAttentionSignal({name:'converter',description:'Offline file converter for PDF, video and audio',topics:['productivity']}),0);
+  assert.equal(discover.directAttentionSignal({name:'editor',description:'Video editor with automation workflows and a fast runtime',topics:['design']}),0);
   assert.ok(discover.directAttentionSignal({name:'runtime',description:'On-device LLM inference runtime',topics:['edge-ai']}) > 0);
   const unrelated = discover.fallbackCopy({name:'converter',description:'Offline file converter for PDF, video and audio',topics:[],stargazers_count:5000,forks_count:20,license:{spdx_id:'MIT'}},'new',null,'',null);
   assert.equal(unrelated.relevant,false);
+  assert.equal(discover.isResourceCollection({name:'awesome-agent-tools',description:'A curated list of AI agent tools'}),true);
+  assert.equal(discover.fallbackCopy({name:'awesome-agent-tools',description:'A curated list of AI agent tools',topics:['ai'],stargazers_count:5000,forks_count:20,license:{spdx_id:'MIT'}},'new',null,'',null).relevant,false);
 });
 
 test('推荐文案必须带有能在仓库资料中逐字回查的证据',()=>{
