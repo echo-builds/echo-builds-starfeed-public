@@ -160,10 +160,20 @@ function uniqueText(values,limit = 3) {
   return [...new Set((Array.isArray(values) ? values : []).map(value=>clean(value,260)).filter(value=>value.length >= 6))].slice(0,limit);
 }
 
+function normalizeEvidenceText(value) {
+  // Use the same Markdown-stripped view the classifier sees. Otherwise
+  // literal quotes such as "AI agents" fail against "**AI agents**".
+  return clean(String(value || '')
+    .replace(/```[\s\S]*?```/g,' ')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/!?\[([^\]]+)\]\([^)]+\)/g,'$1')
+    .replace(/[#>*_`|~]/g,' '),100000).toLowerCase();
+}
+
 function recommendationEvidenceSupported(candidate,quotes) {
-  const source = clean(`${candidate.repo.description || ''} ${(candidate.repo.topics || []).join(' ')} ${candidate.release?.name || ''} ${candidate.release?.body || ''} ${candidate.readme || ''}`,100000).toLowerCase();
+  const source = normalizeEvidenceText(`${candidate.repo.description || ''} ${(candidate.repo.topics || []).join(' ')} ${candidate.release?.name || ''} ${candidate.release?.body || ''} ${candidate.readme || ''}`);
   const evidence = uniqueText(quotes);
-  return evidence.length > 0 && evidence.every(quote=>source.includes(quote.toLowerCase()));
+  return evidence.length > 0 && evidence.every(quote=>source.includes(normalizeEvidenceText(quote)));
 }
 
 async function classify(req,candidates) {
@@ -359,4 +369,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {attentionSignal,conservativeDecisionSupported,directAttentionSignal,fallbackCopy,fallbackSummary,isResourceCollection,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
+module.exports._test = {attentionSignal,normalizeEvidenceText,conservativeDecisionSupported,directAttentionSignal,fallbackCopy,fallbackSummary,isResourceCollection,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
