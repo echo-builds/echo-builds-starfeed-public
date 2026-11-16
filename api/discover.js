@@ -106,13 +106,17 @@ function attentionSignal(repo,readme = '') {
 }
 
 function directAttentionSignal(repo,readme = '') {
-  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')} ${String(readme).slice(0,4000)}`.toLowerCase();
+  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')}`.toLowerCase();
   const groups = [
     /artificial intelligence|\bai\b|llm|multimodal|foundation model|generative/,
-    /agent|mcp|skill|tool calling|workflow|automation|orchestrat/,
-    /inference|embedding|vector|rag|model serving|gpu|runtime|evaluation|observability|guardrail/
+    /\bagent(?:ic|s)?\b|\bmcp\b|claude|codex|tool calling|agent skill/,
+    /model inference|llm inference|on-device llm|embedding model|\brag\b|model serving|llm evaluation|ai observability|llm observability|guardrail/
   ];
   return groups.reduce((score,pattern)=>score + Number(pattern.test(text)),0);
+}
+
+function isResourceCollection(repo) {
+  return /^awesome[-_]/i.test(repo.name || '') || /curated (?:list|collection)|awesome list|collection of (?:tools|projects|resources)|resources? list/i.test(repo.description || '');
 }
 
 function metadataQuality(repo,readme,cover) {
@@ -138,8 +142,8 @@ function fallbackCopy(repo,kind,release,readme,cover) {
   const signal = attentionSignal(repo,readme);
   const directSignal = directAttentionSignal(repo,readme);
   return {
-    relevant:directSignal > 0,
-    attention_category:directSignal > 0 ? 'ai_related' : 'irrelevant',
+    relevant:directSignal > 0 && !isResourceCollection(repo),
+    attention_category:directSignal > 0 && !isResourceCollection(repo) ? 'ai_related' : 'irrelevant',
     attention_score:Math.min(80,42 + signal * 10),
     quality_score:metadataQuality(repo,readme,cover),
     title:repo.name,
@@ -289,4 +293,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {attentionSignal,directAttentionSignal,fallbackCopy,fallbackSummary,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
+module.exports._test = {attentionSignal,directAttentionSignal,fallbackCopy,fallbackSummary,isResourceCollection,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
