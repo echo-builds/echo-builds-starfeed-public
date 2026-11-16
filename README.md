@@ -83,6 +83,7 @@ Vercel 部署需要配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` 和 `SESSI
 - **默认零模型请求**：推荐流优先使用已核对的中文内容；新仓库仍可进入推荐，但可能显示原始简介。GitHub 登录、Stars、推荐流不要求模型 API Key。
 - **如需自然语言搜索与 README 中文翻译**：可以自行申请 Google AI Studio 的 Gemini API Key，并在 Vercel 配置 `GEMINI_API_KEY` 与 `ENABLE_FREE_GEMINI=true`。模型默认为 `gemini-2.5-flash-lite`，可通过 `GEMINI_FREE_MODEL` 修改。
 - **免费额度用尽**：自动回退为 GitHub 检索和原始 README，不会切换到 Vercel AI Gateway 或其他付费模型。免费 Gemini 是否可用、限额和收费状态以 Google AI Studio 中该项目的实际设置为准；为确保不产生费用，请使用未启用付费结算的免费层项目。
+- **新项目中文介绍定期补充**：仓库的 [Refresh verified Chinese project cards](https://github.com/echo-builds/echo-builds-starfeed/actions/workflows/refresh-featured-copy.yml) 工作流每天执行一次。默认没有密钥时仅跳过，不会调用模型或生成内容。需要时可在 GitHub Actions Secrets 中设置 `ENABLE_FREE_GEMINI=true` 和 `GEMINI_API_KEY`，每次最多尝试 4 个项目；成功且证据校验通过后提交至 `data/featured-copy.json`。设置于 Vercel 的环境变量不会自动同步至 GitHub Actions。
 - **可选的首页 AI 分类**：只有额外配置 `ENABLE_LIVE_DISCOVERY_AI=true` 才会调用模型，不建议免费部署开启；默认关闭。
 - **可选 GitHub 读取凭证**：`GITHUB_API_TOKEN` 可提高 GitHub API 读取额度，不是必须项。
 
