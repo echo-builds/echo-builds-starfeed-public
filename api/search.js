@@ -93,7 +93,7 @@ function shape(item) {
 }
 
 async function githubSearch(query,token) {
-  const q = `${cleanQuery(query)} in:name,description,readme archived:false fork:false`;
+  const q = `${cleanQuery(query)} in:name,description archived:false fork:false`;
   const params = new URLSearchParams({q,sort:'stars',order:'desc',per_page:'30'});
   const response = await fetch(`${GITHUB_API}/search/repositories?${params}`,{
     headers:githubHeaders(token),signal:AbortSignal.timeout(10000)
@@ -105,22 +105,28 @@ async function githubSearch(query,token) {
 
 async function addChineseCopy(req,input,items) {
   if (!items.length) return items;
-  try {
-    const candidates = items.slice(0,24).map(item=>({
+  const chunks = [];
+  for (let index = 0; index < items.length; index += 8) chunks.push(items.slice(index,index + 8));
+  const batches = await Promise.allSettled(chunks.map(async chunk=>{
+    const candidates = chunk.map(item=>({
       full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count
     }));
-    const result = await askModel(req,[
-      {role:'system',content:'你为 GitHub 项目搜索结果写中文卡片。只输出 JSON：{"items":[{"full_name":"owner/repo","title":"一句中文标题","summary":"一句中文说明"}]}。保持输入顺序和 full_name，不增加项目。title 说明用户用它做什么，不要复述仓库名；summary 结合用户需求说明核心能力，必须客观，不虚构。每项都只写一句，避免营销话术。'},
+    return askModel(req,[
+      {role:'system',content:'你筛选 GitHub 搜索结果并写中文卡片。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"title":"一句中文标题","summary":"一句中文说明"}]}。必须为输入中的每个项目返回一项并保持顺序与 full_name；确实不符合用户需求时 relevant=false。title 说明用户能用它做什么，不复述仓库名；summary 结合仓库描述和用户需求说明核心能力，必须客观，不虚构。每项都只写一句，避免营销话术。'},
       {role:'user',content:JSON.stringify({request:input,candidates})}
-    ],2400);
-    const copy = new Map((Array.isArray(result.items) ? result.items : []).map(item=>[String(item.full_name || '').toLowerCase(),item]));
-    return items.map(item=>{
-      const text = copy.get(String(item.full_name).toLowerCase());
-      return text ? {...item,ai_title:cleanQuery(text.title).slice(0,44),ai_summary:cleanQuery(text.summary).slice(0,120)} : item;
-    });
-  } catch {
-    return items;
+    ],1200);
+  }));
+  const copy = new Map();
+  for (const batch of batches) if (batch.status === 'fulfilled') {
+    for (const item of Array.isArray(batch.value.items) ? batch.value.items : []) {
+      copy.set(String(item.full_name || '').toLowerCase(),item);
+    }
   }
+  return items.flatMap(item=>{
+    const text = copy.get(String(item.full_name).toLowerCase());
+    if (text?.relevant === false) return [];
+    return [text ? {...item,ai_title:cleanQuery(text.title).slice(0,44),ai_summary:cleanQuery(text.summary).slice(0,120)} : item];
+  });
 }
 
 module.exports = async function handler(req,res) {
