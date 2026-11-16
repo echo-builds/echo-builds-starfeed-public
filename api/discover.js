@@ -252,7 +252,7 @@ module.exports = async function handler(req,res) {
     }));
     const decisions = await classify(req,enriched);
     const aiClassified = decisions.size > 0;
-    const scored = enriched.flatMap(item=>{
+    let scored = enriched.flatMap(item=>{
       const key = item.repo.full_name.toLowerCase();
       const fallback = fallbackCopy(item.repo,item.kind,item.release,item.readme,item.cover);
       const decision = aiClassified ? decisions.get(key) : fallback;
@@ -283,6 +283,33 @@ module.exports = async function handler(req,res) {
       }];
     });
 
+    let classifierMode = aiClassified ? 'ai' : 'fallback';
+    if (!scored.length && aiClassified) {
+      classifierMode = 'strict_fallback_after_ai';
+      scored = enriched.flatMap(item=>{
+        const fallback = fallbackCopy(item.repo,item.kind,item.release,item.readme,item.cover);
+        if (!fallback.relevant || fallback.quality_score < 55) return [];
+        const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
+        const freshness = freshnessScore(freshnessDate,item.kind === 'new' ? 90 : 45);
+        const momentum = item.kind === 'new' ? momentumScore(item.repo) : 0;
+        const heat = fallback.attention_score * .42 + fallback.quality_score * .2 + freshness * .16 + popularityScore(item.repo.stargazers_count) * .12 + momentum * .1;
+        return [{
+          ...item.repo,
+          cover:item.cover,
+          ai_title:item.repo.name,
+          ai_summary:fallback.summary,
+          selection_reason:item.kind === 'new' ? '近期高星新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,
+          release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url,has_assets:Array.isArray(item.release.assets) && item.release.assets.length > 0} : null,
+          attention_category:fallback.attention_category,
+          attention_score:fallback.attention_score,
+          quality_score:fallback.quality_score,
+          evidence_quotes:[],
+          heat_score:heat,
+          candidate_kind:item.kind
+        }];
+      });
+    }
+
     const newItems = scored.filter(item=>item.candidate_kind === 'new').sort((a,b)=>b.heat_score-a.heat_score);
     const releaseItems = scored.filter(item=>item.candidate_kind === 'release').sort((a,b)=>b.heat_score-a.heat_score);
     const items = [];
@@ -292,7 +319,7 @@ module.exports = async function handler(req,res) {
     }
     for (const item of items) delete item.candidate_kind;
 
-    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:aiClassified ? 'ai' : 'fallback'});
+    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:classifierMode});
   } catch (error) {
     return res.status(502).json({error:'discover_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
