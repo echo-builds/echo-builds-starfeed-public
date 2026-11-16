@@ -68,6 +68,7 @@ jobs:
             count:payload.items.length,
             classifier:payload.classifier,
             diagnostics:payload.diagnostics,
+            audited_at:new Date().toISOString(),
             method:payload.method,
             page:payload.page,
             items:records
