@@ -73,20 +73,15 @@ function focusedTerm(value) {
 }
 
 function complementaryQueries(plan) {
-  const queries = [...(Array.isArray(plan?.queries) ? plan.queries : [])];
+  const generated = [];
   const checks = (Array.isArray(plan?.capability_checks) ? plan.capability_checks : []).filter(check=>check?.name);
-  const frequencies = new Map();
-  for (const check of checks) for (const token of tokenSet(check.name)) frequencies.set(token,(frequencies.get(token) || 0) + 1);
-  const anchor = [...frequencies.entries()].sort((a,b)=>b[1]-a[1] || b[0].length-a[0].length).find(([,count])=>count > 1)?.[0] || '';
   for (let left = 0; left < checks.length; left++) {
     for (let right = left + 1; right < checks.length; right++) {
-      const leftTerms = unique(checks[left].evidence_terms,8).map(focusedTerm).filter(Boolean).sort((a,b)=>a.split(' ').length-b.split(' ').length);
-      const rightTerms = unique(checks[right].evidence_terms,8).map(focusedTerm).filter(Boolean).sort((a,b)=>a.split(' ').length-b.split(' ').length);
-      if (leftTerms[0] && rightTerms[0]) queries.unshift(clean(`${anchor} ${leftTerms[0]} ${rightTerms[0]}`,120));
-      if (leftTerms[0] && rightTerms.at(-1)) queries.unshift(clean(`${anchor} ${leftTerms[0]} ${rightTerms.at(-1)}`,120));
+      const words = [...new Set([...tokenSet(checks[left].name),...tokenSet(checks[right].name)])];
+      if (words.length >= 2) generated.push(words.slice(0,5).join(' '));
     }
   }
-  return unique(queries,7);
+  return unique([...generated.slice(0,2),...(Array.isArray(plan?.queries) ? plan.queries : [])],7);
 }
 
 function fallbackPlan(input) {
@@ -111,7 +106,7 @@ function fallbackPlan(input) {
 async function planSearch(req,input) {
   try {
     const plan = await askModel(req,[
-      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":[{"name":"必须能力","evidence_terms":["README 中可能出现的英文术语或短语"]}],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries 和 constraints 必须是字符串数组。core_capabilities 必须把每项不可缺少的能力单独列出，并为每项给出 2-6 个可在 Description、Topics 或 README 中核验的英文术语、同义词或短语；不要把只属于偏好或质量判断的词列为必须能力。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-4 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
+      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":[{"name":"必须能力","evidence_terms":["README 中可能出现的英文术语或短语"]}],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries 和 constraints 必须是字符串数组。core_capabilities 必须把每项不可缺少的能力单独列出，并为每项给出 2-6 个可在 Description、Topics 或 README 中核验的英文术语、同义词或短语；不要把只属于偏好或质量判断的词列为必须能力。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询必须像人在 GitHub 上发现仓库时会使用的产品类别、技术类别或输入输出组合，至少一条使用常见产品类别或仓库类别；不要输出只有 code export、key points 这类过宽的结果字段。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-5 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
       {role:'user',content:JSON.stringify({request:input})}
     ],1800);
     const queries = unique(plan.queries ?? plan.search_queries ?? plan.github_queries ?? plan.search_strategies ?? plan.strategies,5);
@@ -389,9 +384,14 @@ module.exports = async function handler(req,res) {
     const batches = await Promise.allSettled(plan.queries.map(query=>githubSearch(query,token)));
     const all = new Map();
     const diversified = new Map();
-    for (const batch of batches) if (batch.status === 'fulfilled') {
-      for (const item of batch.value) if (item?.full_name && !item.archived && !item.fork) all.set(item.full_name.toLowerCase(),shape(item));
-      for (const item of batch.value.slice(0,8)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
+    const fulfilled = batches.filter(batch=>batch.status === 'fulfilled').map(batch=>batch.value);
+    for (const items of fulfilled) for (const item of items) if (item?.full_name && !item.archived && !item.fork) all.set(item.full_name.toLowerCase(),shape(item));
+    for (let rank = 0; rank < 10 && diversified.size < MAX_CANDIDATES; rank++) {
+      for (const items of fulfilled) {
+        const item = items[rank];
+        if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
+        if (diversified.size >= MAX_CANDIDATES) break;
+      }
     }
     const remainder = [...all.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
     for (const item of remainder) if (diversified.size < MAX_CANDIDATES) diversified.set(item.full_name.toLowerCase(),item);
