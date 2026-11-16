@@ -172,7 +172,7 @@ async function rankAndDescribe(req,input,items) {
   }));
   let result;
   try { result = await askModel(req,[
-    {role:'system',content:'你负责把 GitHub 候选项目按用户真实任务重新筛选和排序。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"title":"一句中文标题","summary":"一句中文说明","bullets":["能力一","能力二"]}]}。必须为输入中的每个项目返回一项，full_name 不得改。relevance_score 为 0-100，表示项目的核心输入、输出和能力与需求的匹配程度。只共享相邻关键词但不能完成目标任务的项目必须 relevant=false；例如用户要文字转配音时，纯语音转文字、聊天机器人、通用视频生成均不相关。不要因为 Star 高就放宽相关性。把用户的主观目标转成 README 证据：自然配音重点看 prosody/pause control、emotion/instruction、multi-speaker、voice cloning、中文支持与 demo；没有资料证据就不要声称具备。title 直接说明能做什么；summary 说明为何适合该需求；bullets 最多 2 个且只能来自资料。客观、不虚构、不写营销话术。'},
+    {role:'system',content:'你负责把 GitHub 候选项目按用户真实任务重新筛选和排序。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"title":"一句中文标题","summary":"一句中文说明","bullets":["能力一","能力二"]}]}。必须为输入中的每个项目返回一项，full_name 不得改。relevance_score 为 0-100，表示项目的核心输入、输出和能力与需求的匹配程度。只共享相邻关键词但不能完成目标任务的项目必须 relevant=false；例如用户要文字转配音时，纯语音转文字、聊天机器人、通用视频生成均不相关。不要因为 Star 高就放宽相关性。把用户的主观目标转成 README 证据：自然配音重点看 prosody/pause control、emotion/instruction、multi-speaker、voice cloning、中文支持与 demo；没有资料证据就不要声称具备。title 直接说明能做什么；summary 用不超过 80 个汉字说明为何适合，不得复制、引用或夹带 README 英文原句；bullets 最多 2 个且只能来自资料。客观、不虚构、不写营销话术。'},
     {role:'user',content:JSON.stringify({request:input,candidates})}
   ],5000); } catch { return fallbackRank(input,items); }
   const copy = new Map();
@@ -247,11 +247,11 @@ module.exports = async function handler(req,res) {
     const diversified = new Map();
     for (const batch of batches) if (batch.status === 'fulfilled') {
       for (const item of batch.value) if (item?.full_name && !item.archived && !item.fork) merged.set(item.full_name.toLowerCase(),shape(item));
-      for (const item of batch.value.slice(0,12)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
+      for (const item of batch.value.slice(0,8)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
     }
     const remainder = [...merged.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
-    for (const item of remainder) if (diversified.size < 48) diversified.set(item.full_name.toLowerCase(),item);
-    let items = [...diversified.values()].slice(0,48);
+    for (const item of remainder) if (diversified.size < 56) diversified.set(item.full_name.toLowerCase(),item);
+    let items = [...diversified.values()].slice(0,56);
     if (!items.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     items = await rankAndDescribe(req,input,await withReadmes(items));
     return res.status(200).json({mode:plan.mode,intent:plan.intent,queries:plan.queries,diagnostic:plan.aiFallbackReason || null,items});
