@@ -214,3 +214,14 @@ test('README 图片优先选取产品截图并过滤徽章',()=>{
   assert.equal(images.length,1);
   assert.match(images[0],/screenshot\.png$/);
 });
+
+
+test('推荐证据校验与发送给模型的 Markdown 去标记文本一致',()=>{
+  const item = {
+    repo:{description:'',topics:[]},
+    release:null,
+    readme:'## Features\nBuild **AI agents** for **workflow automation** with templates.'
+  };
+  assert.equal(discover.recommendationEvidenceSupported(item,['Build AI agents for workflow automation with templates.']),true);
+  assert.equal(discover.recommendationEvidenceSupported(item,['Includes offline video generation']),false);
+});
