@@ -46,13 +46,14 @@ async function askModel(req,messages,maxTokens = 1200) {
 function listText(value) {
   if (typeof value === 'string' || typeof value === 'number') return clean(value,220);
   if (!value || typeof value !== 'object') return '';
-  const candidate = value.query ?? value.q ?? value.search ?? value.value ?? value.text ?? value.name ?? value.capability ?? value.constraint ?? value.term ?? value.terms ?? value.evidence_quote ?? value.quote;
+  const candidate = value.query ?? value.search_query ?? value.github_query ?? value.q ?? value.search ?? value.keywords ?? value.value ?? value.text ?? value.name ?? value.capability ?? value.constraint ?? value.term ?? value.terms ?? value.evidence_quote ?? value.quote;
   if (Array.isArray(candidate)) return clean(candidate.join(' '),220);
   return typeof candidate === 'string' || typeof candidate === 'number' ? clean(candidate,220) : '';
 }
 
 function unique(values,limit) {
-  return [...new Set(values.map(listText).filter(Boolean))].slice(0,limit);
+  const list = Array.isArray(values) ? values : values && typeof values === 'object' ? Object.values(values) : values == null ? [] : [values];
+  return [...new Set(list.map(listText).filter(Boolean))].slice(0,limit);
 }
 
 function fallbackPlan(input) {
@@ -80,13 +81,13 @@ async function planSearch(req,input) {
       {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":["必须能力"],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries、core_capabilities、constraints 必须是字符串数组，不得返回对象数组。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-4 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
       {role:'user',content:JSON.stringify({request:input})}
     ],1800);
-    const queries = unique(Array.isArray(plan.queries) ? plan.queries : [],5);
+    const queries = unique(plan.queries ?? plan.search_queries ?? plan.github_queries ?? plan.search_strategies ?? plan.strategies,5);
     if (!queries.length) throw new Error('empty_queries');
     return {
       intent:clean(plan.intent) || input,
       goal:clean(plan.goal) || clean(plan.intent) || input,
-      core_capabilities:unique(Array.isArray(plan.core_capabilities) ? plan.core_capabilities : [],8),
-      constraints:unique(Array.isArray(plan.constraints) ? plan.constraints : [],8),
+      core_capabilities:unique(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves,8),
+      constraints:unique(plan.constraints ?? plan.requirements ?? plan.limitations,8),
       queries,
       mode:'ai'
     };
