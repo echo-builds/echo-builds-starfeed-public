@@ -25,7 +25,7 @@ function aiToken(req) {
   return process.env.AI_GATEWAY_API_KEY || req.headers['x-vercel-oidc-token'] || process.env.VERCEL_OIDC_TOKEN || '';
 }
 
-async function askModel(req,messages,maxTokens = 3200) {
+async function askModel(req,messages,maxTokens = 5200) {
   const token = aiToken(req);
   if (!token) throw new Error('ai_unavailable');
   let response;
@@ -34,7 +34,7 @@ async function askModel(req,messages,maxTokens = 3200) {
       method:'POST',
       headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
       body:JSON.stringify({model:MODEL,reasoning:{effort:'none'},temperature:0.1,max_tokens:maxTokens,messages}),
-      signal:AbortSignal.timeout(18000)
+      signal:AbortSignal.timeout(22000)
     });
     if (response.status !== 429 || attempt) break;
     await new Promise(resolve=>setTimeout(resolve,1200));
@@ -69,7 +69,7 @@ function shape(item) {
 }
 
 async function search(query,token,page) {
-  const params = new URLSearchParams({q:query,sort:'stars',order:'desc',per_page:'40',page:String(page)});
+  const params = new URLSearchParams({q:query,sort:'stars',order:'desc',per_page:'50',page:String(page)});
   const data = await githubJson('/search/repositories?' + params,token);
   return Array.isArray(data?.items) ? data.items : [];
 }
@@ -79,15 +79,14 @@ function resolveAsset(value,repo) {
   if (!raw || /^(data:|javascript:)/i.test(raw)) return null;
   try {
     if (/^https?:\/\//i.test(raw)) return new URL(raw).href;
-    const path = raw.replace(/^\.\//,'');
-    return `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch || 'main'}/${path}`;
+    return `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch || 'main'}/${raw.replace(/^\.\//,'')}`;
   } catch { return null; }
 }
 
 function readmeImages(markdown,repo) {
   const found = [];
-  for (const match of markdown.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g)) found.push(match[1]);
-  for (const match of markdown.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) found.push(match[1]);
+  for (const match of String(markdown || '').matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g)) found.push(match[1]);
+  for (const match of String(markdown || '').matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) found.push(match[1]);
   const filtered = [...new Set(found.map(value=>resolveAsset(value,repo)).filter(Boolean))].filter(url=>
     !/shields\.io|badge|badgen|license|coverage|actions\/workflows|social|logo(?:\.|\/)|icon(?:\.|\/)|star-history|trendshift|avatars\.githubusercontent|github\.com\/.+\.svg/i.test(url) &&
     !/\.svg(?:\?|$)/i.test(url) &&
@@ -95,61 +94,85 @@ function readmeImages(markdown,repo) {
   return filtered.sort((a,b)=>Number(/screenshot|preview|demo|showcase|interface|ui[-_.\/]/i.test(b))-Number(/screenshot|preview|demo|showcase|interface|ui[-_.\/]/i.test(a)));
 }
 
-function fallbackRelevant(repo,readme) {
-  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')}`.toLowerCase();
-  const relevant = /(artificial intelligence|\bai\b|llm|agent|mcp|rag|prompt|model|copilot|workflow|automation|productivity|design|prototype|research|meeting|note|transcri|voice|audio|video|education|analytics|search|knowledge|developer tool)/i.test(text);
-  const excluded = /(rom hack|jailbreak|cheat|trainer|keygen|skin swapper|mario kart|nintendo switch|game recomp|systemhelper|mobilegestalt)/i.test(text) && !/(\bai\b|agent|llm|model)/i.test(text);
-  return relevant && !excluded;
+function attentionSignal(repo,readme = '') {
+  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')} ${String(readme).slice(0,4000)}`.toLowerCase();
+  const groups = [
+    /artificial intelligence|\bai\b|llm|multimodal|foundation model|generative/,
+    /agent|mcp|skill|tool calling|workflow|automation|orchestrat/,
+    /inference|embedding|vector|rag|model serving|gpu|runtime|evaluation|observability|guardrail/,
+    /copilot|assistant|productivity|research|meeting|note|transcri|voice|audio|video|design|prototype|search|knowledge/
+  ];
+  return groups.reduce((score,pattern)=>score + Number(pattern.test(text)),0);
 }
 
-function likelyRelevant(repo) {
-  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')}`.toLowerCase();
-  const strong = /(artificial intelligence|\bai\b|llm|agent|mcp|rag|prompt|deepseek|claude|openai|gemini|copilot|workflow automation|speech|transcri|voice cloning|video generation|research assistant|design tool|prototype|meeting note)/i.test(text);
-  const excluded = /(rom hack|jailbreak|cheat|trainer|keygen|skin swapper|mario kart|nintendo switch|game recomp|systemhelper|mobilegestalt)/i.test(text) && !/(\bai\b|agent|llm|model)/i.test(text);
-  return strong && !excluded;
+function metadataQuality(repo,readme,cover) {
+  let score = 24;
+  if (repo.description) score += 14;
+  if (String(readme || '').length > 1000) score += 20;
+  if (repo.homepage) score += 10;
+  if (cover) score += 10;
+  if (repo.license?.spdx_id && !['NOASSERTION','OTHER'].includes(repo.license.spdx_id)) score += 10;
+  if (Number(repo.forks_count || 0) >= 20) score += 7;
+  if (Array.isArray(repo.topics) && repo.topics.length >= 2) score += 5;
+  return Math.min(100,score);
 }
 
 function fallbackSummary(repo) {
-  const original = clean(repo.description,260);
-  if (/[㐀-鿿]/.test(original)) {
-    const boundary = original.search(/[。！？]\s+(?=[A-Z][A-Za-z])/);
-    return clean(boundary >= 0 ? original.slice(0,boundary + 1) : original,110);
-  }
-  const text = `${repo.name} ${original} ${(repo.topics || []).join(' ')}`.toLowerCase();
-  if (/video|film|animation/.test(text)) return '面向视频生成、编辑或分析的 AI 工具，可用于了解新的内容生产方式。';
-  if (/audio|voice|speech|transcri|podcast/.test(text)) return '面向语音、音频或转写场景的 AI 工具，可用于内容处理与产品能力验证。';
-  if (/design|prototype|ui|ux/.test(text)) return '面向产品设计、原型或界面工作流的 AI 工具。';
-  if (/rag|knowledge|search/.test(text)) return '面向知识检索、文档问答或搜索体验的 AI 工具。';
-  if (/model|inference|gpu|deploy/.test(text)) return '面向 AI 模型运行、部署或管理的开源工具。';
-  if (/code|coding|developer|software/.test(text)) return '帮助开发者完成编码、调试或工程任务的 AI 工具。';
-  if (/skill|agent|mcp|workflow|automation/.test(text)) return '为 AI Agent 提供技能、工具调用或自动化工作流能力。';
-  return '与 AI 产品、Agent 或工作流相关的近期高星开源项目。';
+  const original = clean(repo.description,170);
+  if (/[㐀-鿿]/.test(original)) return original;
+  if (original) return `仓库原始说明：${original}`;
+  return '该项目缺少足够的仓库说明，具体能力需要进入 README 进一步确认。';
 }
 
-function fallbackCopy(repo,kind,release) {
-  const summary = fallbackSummary(repo);
+function fallbackCopy(repo,kind,release,readme,cover) {
+  const signal = attentionSignal(repo,readme);
   return {
-    relevant:true,
-    quality_score:55 + Math.min(25,Math.round(Math.log10(Math.max(10,repo.stargazers_count || 0)) * 5)),
+    relevant:signal > 0,
+    attention_category:signal > 0 ? 'ai_related' : 'irrelevant',
+    attention_score:Math.min(80,42 + signal * 10),
+    quality_score:metadataQuality(repo,readme,cover),
     title:repo.name,
-    summary,
-    selection_reason:kind === 'new' ? '近期新项目' : `近期发布 ${release?.tag_name || '重要版本'}`
+    summary:fallbackSummary(repo),
+    selection_reason:kind === 'new' ? '近期高星新项目' : `近期发布 ${release?.tag_name || '重要版本'}`
   };
 }
 
 async function classify(req,candidates) {
   const payload = candidates.map(({repo,kind,release,readme,cover})=>({
-    full_name:repo.full_name,description:repo.description,topics:repo.topics,stars:repo.stargazers_count,forks:repo.forks_count,
-    created_at:repo.created_at,latest_release:release ? {tag:release.tag_name,published_at:release.published_at,name:release.name} : null,
-    has_product_image:Boolean(cover),homepage:repo.homepage,readme_excerpt:readme.slice(0,750)
+    full_name:repo.full_name,
+    description:repo.description,
+    topics:repo.topics,
+    stars:repo.stargazers_count,
+    forks:repo.forks_count,
+    created_at:repo.created_at,
+    pushed_at:repo.pushed_at,
+    latest_release:release ? {tag:release.tag_name,published_at:release.published_at,name:release.name,body:clean(release.body,500)} : null,
+    homepage:repo.homepage,
+    has_product_image:Boolean(cover),
+    readme_excerpt:clean(readme.replace(/```[\s\S]*?```/g,' ').replace(/<[^>]+>/g,' ').replace(/[#>*_`|~-]/g,' '),1300)
   }));
   try {
     const result = await askModel(req,[
-      {role:'system',content:'你为面向 AI 产品经理的 GitHub 项目信息流做准入判断。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"quality_score":0,"title":"中文标题","summary":"中文一句话","selection_reason":"入选原因"}]}。relevant 仅在项目与 AI 产品、Agent、AI 工作流、研究/设计/效率工具或可借鉴的产品形态直接相关时为 true；游戏反编译、越狱、系统修改、普通代码练习应为 false。quality_score 综合 README 完整度、可体验性、社区参与、产品完成度，0-100。title 和 summary 只用于首页卡片，可准确概括但不得虚构。selection_reason 只能写“近期新项目”或“近期发布 <版本>”。必须为每个输入项目返回一项。'},
+      {role:'system',content:'你为 AI 产品经理的 GitHub 推荐流做准入、价值判断和中文介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"attention_category":"ai_product_interaction|agent_workflow|model_capability|ai_productivity|enabling_infrastructure|irrelevant","attention_score":0,"quality_score":0,"title":"中文标题","summary":"中文一句话","selection_reason":"入选原因"}]}。必须为每个候选返回一项并保持 full_name。关注价值包括：新的 AI 产品或交互方式；Agent、Skill 与 AI 工作流；值得了解的模型能力或技术创新；实用的 AI 效率工具；对 AI 产品落地有重要意义的基础设施。不要机械排除技术项目：如果它带来新的模型能力、运行方式、评测、安全、数据、部署或开发方法，并会影响产品能力与落地决策，可以进入推荐。反过来，只有热度但与 AI 产品无直接关系、没有新能力或工作方法的项目应排除。attention_score 表示对 AI 产品经理的了解价值；quality_score 综合 README 完整度、维护状态、可体验性、社区参与和产品完成度。title 直接说明解决的问题或提供的能力。summary 必须先写 README 可核验的事实：解决什么实际问题、提供什么方案、有什么新意；不要堆砌术语，不写空泛的“值得关注”。不得编造功能。技术项目的产品价值如果属于推测，必须使用“可用于”“可能帮助”等措辞。selection_reason 只能写“近期高星新项目”或“近期发布 <版本>”。'},
       {role:'user',content:JSON.stringify({candidates:payload})}
-    ],3600);
+    ],6200);
     return new Map((Array.isArray(result.items) ? result.items : []).map(item=>[String(item.full_name || '').toLowerCase(),item]));
   } catch { return new Map(); }
+}
+
+function freshnessScore(date,windowDays) {
+  const age = Math.max(0,(Date.now() - Date.parse(date || 0)) / DAY);
+  return Math.max(0,100 - age / Math.max(1,windowDays) * 100);
+}
+
+function popularityScore(stars) {
+  return Math.max(0,Math.min(100,Math.log10(Math.max(1,Number(stars || 0))) * 22));
+}
+
+function momentumScore(repo) {
+  const ageDays = Math.max(1,(Date.now() - Date.parse(repo.created_at || 0)) / DAY);
+  const starsPerDay = Number(repo.stargazers_count || 0) / ageDays;
+  return Math.max(0,Math.min(100,Math.log10(starsPerDay + 1) * 42));
 }
 
 module.exports = async function handler(req,res) {
@@ -177,15 +200,23 @@ module.exports = async function handler(req,res) {
       search(`is:public archived:false fork:false stars:>=5000 pushed:>=${activeSince}`,token,page)
     ]);
 
-    const newRepos = newRaw.filter(item=>!item.archived && !item.fork && likelyRelevant(item)).slice(0,14).map(item=>({repo:shape(item),kind:'new',release:null}));
-    const oldPool = activeRaw.filter(item=>Date.parse(item.created_at) < now - 90 * DAY && !item.archived && !item.fork && likelyRelevant(item)).slice(0,12);
-    const oldWithRelease = (await Promise.all(oldPool.map(async item=>({
-      repo:shape(item),kind:'release',release:await githubJson(`/repos/${item.full_name}/releases/latest`,token).catch(()=>null)
-    })))).filter(item=>item.release?.published_at && Date.parse(item.release.published_at) >= releaseSince);
+    const newRepos = newRaw.filter(item=>!item.archived && !item.fork).sort((a,b)=>{
+      const aValue = momentumScore(a) + attentionSignal(a) * 12;
+      const bValue = momentumScore(b) + attentionSignal(b) * 12;
+      return bValue-aValue;
+    }).slice(0,20).map(item=>({repo:shape(item),kind:'new',release:null}));
+
+    const oldPool = activeRaw.filter(item=>Date.parse(item.created_at) < now - 90 * DAY && !item.archived && !item.fork).sort((a,b)=>{
+      const aValue = popularityScore(a.stargazers_count) + attentionSignal(a) * 12;
+      const bValue = popularityScore(b.stargazers_count) + attentionSignal(b) * 12;
+      return bValue-aValue;
+    }).slice(0,16);
+    const oldWithRelease = (await Promise.all(oldPool.map(async item=>({repo:shape(item),kind:'release',release:await githubJson(`/repos/${item.full_name}/releases/latest`,token).catch(()=>null)}))))
+      .filter(item=>item.release?.published_at && Date.parse(item.release.published_at) >= releaseSince);
 
     const merged = new Map();
     for (const item of [...newRepos,...oldWithRelease]) merged.set(item.repo.full_name.toLowerCase(),item);
-    const base = [...merged.values()].slice(0,18);
+    const base = [...merged.values()].slice(0,30);
     const enriched = await Promise.all(base.map(async item=>{
       const readme = await githubText(`/repos/${item.repo.full_name}/readme`,token).catch(()=>'');
       return {...item,readme,cover:readmeImages(readme,item.repo)[0] || null};
@@ -193,15 +224,31 @@ module.exports = async function handler(req,res) {
     const decisions = await classify(req,enriched);
     const scored = enriched.flatMap(item=>{
       const key = item.repo.full_name.toLowerCase();
-      const hasDecision = decisions.has(key);
-      const decision = decisions.get(key) || fallbackCopy(item.repo,item.kind,item.release);
-      const relevant = hasDecision ? decision.relevant !== false && Number(decision.quality_score || 0) >= 62 : fallbackRelevant(item.repo,item.readme);
-      if (!relevant) return [];
+      const fallback = fallbackCopy(item.repo,item.kind,item.release,item.readme,item.cover);
+      const decision = decisions.get(key) || fallback;
+      const attention = Math.max(0,Math.min(100,Number(decision.attention_score || 0)));
+      const quality = Math.max(0,Math.min(100,Number(decision.quality_score || fallback.quality_score)));
+      const accepted = decisions.has(key) ? decision.relevant !== false && attention >= 62 && quality >= 55 : fallback.relevant && quality >= 55;
+      if (!accepted) return [];
       const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
-      const freshness = Math.max(0,90 - Math.max(0,(now - Date.parse(freshnessDate || 0)) / DAY));
-      const heat = Math.log10(Math.max(10,item.repo.stargazers_count || 0)) * 20 + freshness + Number(decision.quality_score || 0) * .35;
-      return [{...item.repo,cover:item.cover,ai_title:clean(decision.title,60) || item.repo.name,ai_summary:clean(decision.summary,180) || clean(item.repo.description,180),selection_reason:item.kind === 'new' ? '近期新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url,has_assets:Array.isArray(item.release.assets) && item.release.assets.length > 0} : null,quality_score:Number(decision.quality_score || 0),heat_score:heat,candidate_kind:item.kind}];
+      const freshness = freshnessScore(freshnessDate,item.kind === 'new' ? 90 : 45);
+      const momentum = item.kind === 'new' ? momentumScore(item.repo) : 0;
+      const heat = attention * .42 + quality * .2 + freshness * .16 + popularityScore(item.repo.stargazers_count) * .12 + momentum * .1;
+      return [{
+        ...item.repo,
+        cover:item.cover,
+        ai_title:clean(decision.title,60) || item.repo.name,
+        ai_summary:clean(decision.summary,180) || fallback.summary,
+        selection_reason:item.kind === 'new' ? '近期高星新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,
+        release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url,has_assets:Array.isArray(item.release.assets) && item.release.assets.length > 0} : null,
+        attention_category:clean(decision.attention_category,40),
+        attention_score:attention,
+        quality_score:quality,
+        heat_score:heat,
+        candidate_kind:item.kind
+      }];
     });
+
     const newItems = scored.filter(item=>item.candidate_kind === 'new').sort((a,b)=>b.heat_score-a.heat_score);
     const releaseItems = scored.filter(item=>item.candidate_kind === 'release').sort((a,b)=>b.heat_score-a.heat_score);
     const items = [];
@@ -211,8 +258,10 @@ module.exports = async function handler(req,res) {
     }
     for (const item of items) delete item.candidate_kind;
 
-    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'new_or_recent_release',classifier:decisions.size ? 'ai' : 'fallback'});
+    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:decisions.size ? 'ai' : 'fallback'});
   } catch (error) {
     return res.status(502).json({error:'discover_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
 };
+
+module.exports._test = {attentionSignal,fallbackCopy,fallbackSummary,metadataQuality,momentumScore,popularityScore,readmeImages};
