@@ -1,8 +1,6 @@
 const {getSession,refreshSession,setSession} = require('./_lib/session');
 
 const GITHUB_API = 'https://api.github.com';
-const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
-const MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
 const DAY = 86400000;
 const VERIFIED_COPY = require('../data/featured-copy.json').entries;
 
@@ -22,29 +20,9 @@ function jsonFrom(text) {
   }
 }
 
-function aiToken(req) {
-  return process.env.AI_GATEWAY_API_KEY || req.headers['x-vercel-oidc-token'] || process.env.VERCEL_OIDC_TOKEN || '';
-}
-
-async function askModel(req,messages,maxTokens = 5200) {
-  const token = aiToken(req);
-  if (!token) throw new Error('ai_unavailable');
-  let response;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    response = await fetch(GATEWAY_API,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-      body:JSON.stringify({model:MODEL,reasoning:{effort:'none'},temperature:0.1,max_tokens:maxTokens,messages}),
-      signal:AbortSignal.timeout(20000)
-    });
-    if (response.status !== 429 || attempt) break;
-    await new Promise(resolve=>setTimeout(resolve,1200));
-  }
-  if (!response.ok) throw new Error('ai_gateway_' + response.status);
-  const data = await response.json();
-  const parsed = jsonFrom(data?.choices?.[0]?.message?.content);
-  if (!parsed) throw new Error('invalid_ai_response');
-  return parsed;
+const freeAI = require('./_lib/free-ai');
+async function askModel(req,messages,maxTokens=1200) {
+  return freeAI.generateJSON(messages,{maxTokens});
 }
 
 function githubHeaders(token,accept = 'application/vnd.github+json') {
@@ -344,7 +322,7 @@ module.exports = async function handler(req,res) {
     }));
     // The browsing feed must remain free and predictable: never invoke an LLM
     // on a normal page view. Offline/verified summaries are reused instead.
-    const liveAiEnabled = process.env.ENABLE_LIVE_DISCOVERY_AI === 'true';
+    const liveAiEnabled = freeAI.enabled() && process.env.ENABLE_LIVE_DISCOVERY_AI === 'true';
     const decisions = liveAiEnabled ? await classify(req,enriched) : new Map();
     const aiClassified = decisions.size > 0;
     let scored = enriched.flatMap(item=>{
