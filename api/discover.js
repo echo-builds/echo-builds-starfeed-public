@@ -105,6 +105,16 @@ function attentionSignal(repo,readme = '') {
   return groups.reduce((score,pattern)=>score + Number(pattern.test(text)),0);
 }
 
+function directAttentionSignal(repo,readme = '') {
+  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')} ${String(readme).slice(0,4000)}`.toLowerCase();
+  const groups = [
+    /artificial intelligence|\bai\b|llm|multimodal|foundation model|generative/,
+    /agent|mcp|skill|tool calling|workflow|automation|orchestrat/,
+    /inference|embedding|vector|rag|model serving|gpu|runtime|evaluation|observability|guardrail/
+  ];
+  return groups.reduce((score,pattern)=>score + Number(pattern.test(text)),0);
+}
+
 function metadataQuality(repo,readme,cover) {
   let score = 24;
   if (repo.description) score += 14;
@@ -126,9 +136,10 @@ function fallbackSummary(repo) {
 
 function fallbackCopy(repo,kind,release,readme,cover) {
   const signal = attentionSignal(repo,readme);
+  const directSignal = directAttentionSignal(repo,readme);
   return {
-    relevant:signal > 0,
-    attention_category:signal > 0 ? 'ai_related' : 'irrelevant',
+    relevant:directSignal > 0,
+    attention_category:directSignal > 0 ? 'ai_related' : 'irrelevant',
     attention_score:Math.min(80,42 + signal * 10),
     quality_score:metadataQuality(repo,readme,cover),
     title:repo.name,
@@ -232,14 +243,16 @@ module.exports = async function handler(req,res) {
       return {...item,readme,cover:readmeImages(readme,item.repo)[0] || null};
     }));
     const decisions = await classify(req,enriched);
+    const aiClassified = decisions.size > 0;
     const scored = enriched.flatMap(item=>{
       const key = item.repo.full_name.toLowerCase();
       const fallback = fallbackCopy(item.repo,item.kind,item.release,item.readme,item.cover);
-      const decision = decisions.get(key) || fallback;
-      const decisionEvidence = decisions.has(key) ? recommendationEvidenceSupported(item,decision.evidence_quotes) : true;
+      const decision = aiClassified ? decisions.get(key) : fallback;
+      if (!decision) return [];
+      const decisionEvidence = aiClassified ? recommendationEvidenceSupported(item,decision.evidence_quotes) : true;
       const attention = Math.max(0,Math.min(100,Number(decision.attention_score || 0)));
       const quality = Math.max(0,Math.min(100,Number(decision.quality_score || fallback.quality_score)));
-      const accepted = decisions.has(key) ? decision.relevant !== false && decisionEvidence && attention >= 62 && quality >= 55 : fallback.relevant && quality >= 55;
+      const accepted = aiClassified ? decision.relevant !== false && decisionEvidence && attention >= 62 && quality >= 55 : fallback.relevant && quality >= 55;
       if (!accepted) return [];
       const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
       const freshness = freshnessScore(freshnessDate,item.kind === 'new' ? 90 : 45);
@@ -255,7 +268,7 @@ module.exports = async function handler(req,res) {
         attention_category:clean(decision.attention_category,40),
         attention_score:attention,
         quality_score:quality,
-        evidence_quotes:decisions.has(key) ? uniqueText(decision.evidence_quotes) : [],
+        evidence_quotes:aiClassified ? uniqueText(decision.evidence_quotes) : [],
         heat_score:heat,
         candidate_kind:item.kind
       }];
@@ -270,10 +283,10 @@ module.exports = async function handler(req,res) {
     }
     for (const item of items) delete item.candidate_kind;
 
-    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:decisions.size ? 'ai' : 'fallback'});
+    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:aiClassified ? 'ai' : 'fallback'});
   } catch (error) {
     return res.status(502).json({error:'discover_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
 };
 
-module.exports._test = {attentionSignal,fallbackCopy,fallbackSummary,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
+module.exports._test = {attentionSignal,directAttentionSignal,fallbackCopy,fallbackSummary,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
