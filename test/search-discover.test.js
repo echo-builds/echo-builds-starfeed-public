@@ -125,6 +125,24 @@ test('用户未要求资源列表时识别并排除合集候选',()=>{
   assert.equal(search.wantsCollection({intent:'整理安全工具合集',goal:'找到资源列表'}),true);
 });
 
+test('用户未要求教程时排除课程和教学仓库',()=>{
+  const course = {name:'automation-testing-course',description:'A complete Selenium tutorial and learning resource'};
+  assert.equal(search.isInstructionalCandidate(course),true);
+  assert.equal(search.wantsInstructional({intent:'找网页录制工具',goal:'录制并回放网页操作'}),false);
+  assert.equal(search.wantsInstructional({intent:'找 Selenium 教程',goal:'学习网页自动化课程'}),true);
+});
+
+test('本地降级要求核心能力出现在仓库主元数据而非 README 偶然提及',()=>{
+  const checks = [
+    {name:'移动端推理',evidence_terms:['mobile inference','on-device']},
+    {name:'离线运行',evidence_terms:['offline','local inference']}
+  ];
+  const direct = {full_name:'demo/mobile-runtime',description:'On-device mobile inference with offline execution',topics:['mobile-ai'],readme_excerpt:''};
+  const incidental = {full_name:'demo/course',description:'AI learning course',topics:['education'],readme_excerpt:'A chapter mentions mobile inference and offline execution.'};
+  assert.equal(search.primaryCapabilityEvidenceSupported(direct,checks),true);
+  assert.equal(search.primaryCapabilityEvidenceSupported(incidental,checks),false);
+});
+
 test('AI 规划降级时证据必须覆盖原始需求而非只命中相邻能力',()=>{
   assert.equal(search.requestEvidenceSupported('把网页操作录制成可重复执行的自动化流程',['Android 录制回放和桌面控制']),false);
   assert.equal(search.requestEvidenceSupported('本地知识库检索 PDF 并回答问题',['本地部署的个人知识库，支持 PDF 文档检索并回答问题']),true);
