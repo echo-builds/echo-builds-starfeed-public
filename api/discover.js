@@ -206,7 +206,7 @@ function momentumScore(repo) {
 
 module.exports = async function handler(req,res) {
   res.setHeader('X-Content-Type-Options','nosniff');
-  res.setHeader('Cache-Control','public, s-maxage=60, stale-while-revalidate=120');
+  res.setHeader('Cache-Control','no-store');
   if (req.method !== 'GET') return res.status(405).json({error:'method_not_allowed'});
   const page = Math.min(5,Math.max(1,Number(req.query?.page || 1)));
   let token = '';
