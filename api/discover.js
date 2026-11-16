@@ -185,7 +185,16 @@ async function classify(req,candidates) {
       {role:'system',content:'你为 AI 产品经理的 GitHub 推荐流做准入、价值判断和中文介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"attention_category":"ai_product_interaction|agent_workflow|model_capability|ai_productivity|enabling_infrastructure|irrelevant","attention_score":0,"quality_score":0,"title":"中文标题","summary":"中文一句话","selection_reason":"入选原因","evidence_quotes":["资料中的逐字原文"]}]}。必须为每个候选返回一项并保持 full_name。关注价值包括：新的 AI 产品或交互方式；Agent、Skill 与 AI 工作流；值得了解的模型能力或技术创新；实用的 AI 效率工具；对 AI 产品落地有重要意义的基础设施。不要机械排除技术项目：如果它带来新的模型能力、运行方式、评测、安全、数据、部署或开发方法，并会影响产品能力与落地决策，可以进入推荐。反过来，只有热度但与 AI 产品无直接关系、没有新能力或工作方法的项目应排除。每个 relevant 项目必须提供 1-3 条 evidence_quotes，逐字复制 Description、Topics、Release 或 README 原文并直接支撑 title、summary 和关注价值；证据不足就标记 relevant=false。attention_score 表示对 AI 产品经理的了解价值；quality_score 综合 README 完整度、维护状态、可体验性、社区参与和产品完成度。title 直接说明解决的问题或提供的能力。summary 必须先写资料可核验的事实：解决什么实际问题、提供什么方案、有什么新意；不要堆砌术语，不写空泛的“值得关注”。不得编造功能。技术项目的产品价值如果属于推测，必须使用“可用于”“可能帮助”等措辞。selection_reason 只能写“近期高星新项目”或“近期发布 <版本>”。'},
       {role:'user',content:JSON.stringify({candidates:payload})}
     ],6200);
-    return new Map((Array.isArray(result.items) ? result.items : []).map(item=>[String(item.full_name || '').toLowerCase(),item]));
+    // The classifier sometimes uses an equivalent top-level key or a nested result.
+    // Normalize the shape before treating an empty result as an unavailable classifier.
+    const candidates = [result.items,result.repositories,result.projects,result.results,result.data?.items];
+    const rawItems = candidates.find(Array.isArray) || [];
+    return new Map(rawItems.filter(item=>item && typeof item === 'object').map(item=>[
+      String(item.full_name || item.repo_full_name || item.repository || item.repo || '').toLowerCase(),
+      {...item,evidence_quotes:Array.isArray(item.evidence_quotes) ? item.evidence_quotes :
+        Array.isArray(item.evidence) ? item.evidence :
+        Array.isArray(item.quotes) ? item.quotes : []}
+    ]).filter(([key])=>/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/.test(key)));
   } catch { return new Map(); }
 }
 
@@ -287,6 +296,10 @@ module.exports = async function handler(req,res) {
     if (!scored.length && aiClassified) {
       classifierMode = 'strict_fallback_after_ai';
       scored = enriched.flatMap(item=>{
+        // An explicit AI rejection must remain rejected. Only unreviewed items
+        // or positive classifications with unusable evidence may fall back.
+        const reviewed = decisions.get(item.repo.full_name.toLowerCase());
+        if (reviewed?.relevant === false) return [];
         const fallback = fallbackCopy(item.repo,item.kind,item.release,item.readme,item.cover);
         if (!fallback.relevant || fallback.quality_score < 55) return [];
         const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
