@@ -56,6 +56,17 @@ function unique(values,limit) {
   return [...new Set(list.map(listText).filter(Boolean))].slice(0,limit);
 }
 
+function capabilityChecks(values) {
+  const list = Array.isArray(values) ? values : values && typeof values === 'object' ? Object.values(values) : values == null ? [] : [values];
+  return list.map(value=>{
+    if (typeof value === 'string' || typeof value === 'number') return {name:clean(value,100),evidence_terms:[]};
+    if (!value || typeof value !== 'object') return null;
+    const name = clean(value.name ?? value.capability ?? value.label ?? value.value,100);
+    const evidenceTerms = unique(value.evidence_terms ?? value.terms ?? value.keywords ?? value.search_terms,8);
+    return name ? {name,evidence_terms:evidenceTerms} : null;
+  }).filter(Boolean).slice(0,8);
+}
+
 function fallbackPlan(input) {
   const normalized = clean(input,220);
   const fragments = normalized
@@ -78,15 +89,17 @@ function fallbackPlan(input) {
 async function planSearch(req,input) {
   try {
     const plan = await askModel(req,[
-      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":["必须能力"],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries、core_capabilities、constraints 必须是字符串数组，不得返回对象数组。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-4 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
+      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":[{"name":"必须能力","evidence_terms":["README 中可能出现的英文术语或短语"]}],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries 和 constraints 必须是字符串数组。core_capabilities 必须把每项不可缺少的能力单独列出，并为每项给出 2-6 个可在 Description、Topics 或 README 中核验的英文术语、同义词或短语；不要把只属于偏好或质量判断的词列为必须能力。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-4 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
       {role:'user',content:JSON.stringify({request:input})}
     ],1800);
     const queries = unique(plan.queries ?? plan.search_queries ?? plan.github_queries ?? plan.search_strategies ?? plan.strategies,5);
     if (!queries.length) throw new Error('empty_queries');
+    const checks = capabilityChecks(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves);
     return {
       intent:clean(plan.intent) || input,
       goal:clean(plan.goal) || clean(plan.intent) || input,
-      core_capabilities:unique(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves,8),
+      core_capabilities:checks.map(item=>item.name),
+      capability_checks:checks,
       constraints:unique(plan.constraints ?? plan.requirements ?? plan.limitations,8),
       queries,
       mode:'ai'
@@ -137,6 +150,24 @@ function tokenSet(value) {
   const words = text.match(/[a-z0-9][a-z0-9.+#-]{1,}|[㐀-鿿]{2,8}/gu) || [];
   const ignored = new Set(['github','repo','repository','project','projects','open','source','tool','tools','一个','项目','工具','可以','支持','需要','希望']);
   return new Set(words.filter(word=>!ignored.has(word)));
+}
+
+function stemToken(value) {
+  const token = String(value || '').toLowerCase();
+  if (token.length <= 4) return token;
+  return token.replace(/(?:ing|ed|es|s)$/,'');
+}
+
+function capabilityEvidenceSupported(item,checks) {
+  const required = (Array.isArray(checks) ? checks : []).filter(check=>Array.isArray(check?.evidence_terms) && check.evidence_terms.length);
+  if (!required.length) return true;
+  const sourceTokens = new Set([...tokenSet(`${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`)].map(stemToken));
+  return required.every(check=>check.evidence_terms.some(term=>{
+    const tokens = [...tokenSet(term)].map(stemToken);
+    if (!tokens.length) return false;
+    const matched = tokens.filter(token=>sourceTokens.has(token)).length;
+    return matched >= Math.ceil(tokens.length * .75);
+  }));
 }
 
 function activityScore(item) {
@@ -205,20 +236,21 @@ function fallbackRank(plan,items) {
 }
 
 async function rankAndDescribe(req,input,plan,items) {
-  if (!items.length) return [];
-  const candidates = items.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:clean(item.readme_excerpt,900)}));
+  const eligible = items.filter(item=>capabilityEvidenceSupported(item,plan.capability_checks));
+  if (!eligible.length) return [];
+  const candidates = eligible.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:clean(item.readme_excerpt,900)}));
   let result;
   try {
     result = await askModel(req,[
       {role:'system',content:'你负责按用户真实任务筛选和排序 GitHub 仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"evidence_score":0,"quality_score":0,"title":"中文标题","summary":"中文说明","bullets":["能力证据"],"evidence_quotes":["从 Description、Topics 或 README 原样复制的短句"]}]}。只返回真正相关且 relevance_score>=60 的项目，不要为不相关候选返回占位项；full_name 必须来自输入且不得修改。每个入选项目必须给出 1-3 条 evidence_quotes，必须逐字复制输入资料中的原文、不得翻译或改写，并直接支持 summary 中的全部能力判断。缺少关键能力的明确证据就不要返回该项目；相邻能力不能替代用户要求，例如规划、测试或代码审查不能证明具备调用链追踪。第一优先级是核心需求匹配：项目的主要输入、输出和能力必须真正帮助完成用户目标，仅有相邻关键词不算匹配。relevance_score 表示需求匹配程度；evidence_score 表示资料对关键能力的证据充分度；quality_score 表示文档、维护、可体验性和项目完成度。Star 与活跃度只能辅助排序，不能掩盖不相关。title 要直接说明项目解决的问题或提供的能力；summary 用具体自然的中文说明实际问题、解决方案和值得关注的新意，不堆术语。不得声称资料没有明确提供的功能。对技术项目可以解释可能带来的产品价值，但必须使用“可用于”“可能帮助”等措辞区分推测与事实。bullets 最多 2 条，只写资料可核验的能力。'},
-      {role:'user',content:JSON.stringify({request:input,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,constraints:plan.constraints},candidates})}
+      {role:'user',content:JSON.stringify({request:input,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},candidates})}
     ],4800);
   } catch {
-    return fallbackRank(plan,items);
+    return fallbackRank(plan,eligible);
   }
   const assessed = new Map();
   for (const item of Array.isArray(result.items) ? result.items : []) assessed.set(String(item.full_name || '').toLowerCase(),item);
-  return items.flatMap(item=>{
+  return eligible.flatMap(item=>{
     const decision = assessed.get(String(item.full_name || '').toLowerCase());
     const relevance = Math.max(0,Math.min(100,Number(decision?.relevance_score || 0)));
     const evidence = Math.max(0,Math.min(100,Number(decision?.evidence_score || 0)));
@@ -288,4 +320,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,evidenceSupported,fallbackPlan,fallbackRank,listText,metadataQuality,popularityScore,tokenSet,unique};
+module.exports._test = {activityScore,capabilityChecks,capabilityEvidenceSupported,evidenceSupported,fallbackPlan,fallbackRank,listText,metadataQuality,popularityScore,tokenSet,unique};
