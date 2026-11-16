@@ -541,7 +541,7 @@ function discoveryResult(item) {
   const repo = enrich({...shape(item),searchResult:true,feedResult:true,url:safeUrl(item.html_url) || `https://github.com/${item.full_name}`});
   const description = String(repo.description || '').trim();
   const chineseDescription = hasChinese(description) ? description : '';
-  const summary = repo.ai_summary || chineseDescription;
+  const summary = repo.ai_summary || chineseDescription || (description ? `仓库原始说明：${description}` : '');
   if (!summary) return null;
   return {...repo,title:repo.ai_title || repo.name,summary,coverText:summary};
 }
@@ -658,7 +658,7 @@ async function loadDiscover({reset = false} = {}) {
     const response = await fetch('/api/discover?page=' + cursor + '&quality=4',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
     if (!response.ok) throw new Error('Discover HTTP ' + response.status);
     const data = await response.json();
-    incoming = (Array.isArray(data?.items) ? data.items : []).map(shape).filter(preparedCopy);
+    incoming = (Array.isArray(data?.items) ? data.items : []).map(shape);
     const replaceExisting = reset && incoming.length >= 8;
     const merged = new Map();
     for (const repo of incoming) merged.set(repoKey(repo),repo);
