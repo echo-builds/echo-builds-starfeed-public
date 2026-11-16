@@ -43,8 +43,16 @@ async function askModel(req,messages,maxTokens = 1200) {
   return parsed;
 }
 
+function listText(value) {
+  if (typeof value === 'string' || typeof value === 'number') return clean(value,220);
+  if (!value || typeof value !== 'object') return '';
+  const candidate = value.query ?? value.q ?? value.search ?? value.value ?? value.text ?? value.name ?? value.capability ?? value.constraint ?? value.term ?? value.terms;
+  if (Array.isArray(candidate)) return clean(candidate.join(' '),220);
+  return typeof candidate === 'string' || typeof candidate === 'number' ? clean(candidate,220) : '';
+}
+
 function unique(values,limit) {
-  return [...new Set(values.map(value=>clean(value,220)).filter(Boolean))].slice(0,limit);
+  return [...new Set(values.map(listText).filter(Boolean))].slice(0,limit);
 }
 
 function fallbackPlan(input) {
@@ -69,7 +77,7 @@ function fallbackPlan(input) {
 async function planSearch(req,input) {
   try {
     const plan = await askModel(req,[
-      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":["必须能力"],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-4 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
+      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":["必须能力"],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries、core_capabilities、constraints 必须是字符串数组，不得返回对象数组。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-4 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
       {role:'user',content:JSON.stringify({request:input})}
     ],1800);
     const queries = unique(Array.isArray(plan.queries) ? plan.queries : [],5);
@@ -252,4 +260,4 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,fallbackPlan,fallbackRank,metadataQuality,popularityScore,tokenSet};
+module.exports._test = {activityScore,fallbackPlan,fallbackRank,listText,metadataQuality,popularityScore,tokenSet,unique};
