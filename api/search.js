@@ -3,7 +3,7 @@ const {getSession,refreshSession,setSession} = require('./_lib/session');
 const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
-const MAX_CANDIDATES = 50;
+const MAX_CANDIDATES = 24;
 
 function jsonFrom(text) {
   const source = String(text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
@@ -162,19 +162,27 @@ function metadataQuality(item) {
 
 function fallbackRank(plan,items) {
   const needTokens = tokenSet([plan.goal,plan.intent,...plan.core_capabilities,...plan.constraints,...plan.queries].join(' '));
+  const queryTokenSets = plan.queries.map(tokenSet).filter(tokens=>tokens.size);
   return items.map(item=>{
     const source = `${item.full_name} ${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`;
     const sourceTokens = tokenSet(source);
     let overlap = 0;
     for (const token of needTokens) if (sourceTokens.has(token) || source.toLowerCase().includes(token)) overlap++;
-    const relevance = needTokens.size ? Math.min(92,38 + overlap / needTokens.size * 62) : 50;
+    let bestQueryCoverage = 0;
+    for (const queryTokens of queryTokenSets) {
+      let matched = 0;
+      for (const token of queryTokens) if (sourceTokens.has(token) || source.toLowerCase().includes(token)) matched++;
+      bestQueryCoverage = Math.max(bestQueryCoverage,matched / queryTokens.size);
+    }
+    const overallCoverage = needTokens.size ? overlap / needTokens.size : 0;
+    const relevance = Math.min(92,35 + bestQueryCoverage * 45 + overallCoverage * 20);
     const quality = metadataQuality(item);
     const rank = relevance * .72 + quality * .12 + activityScore(item) * .08 + popularityScore(item) * .08;
     const {readme_excerpt,...repo} = item;
     const original = clean(item.description,150);
     const chinese = /[㐀-鿿]/.test(original);
     return {...repo,relevance_score:relevance,quality_score:quality,rank_score:rank,ai_title:item.name,ai_summary:chinese ? original : (original ? `仓库原始说明：${original}` : '该候选项目缺少可核验的仓库简介，请进入 README 确认具体能力。'),ai_bullets:[]};
-  }).filter(item=>item.relevance_score >= 45).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
+  }).filter(item=>item.relevance_score >= 52).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,10);
 }
 
 async function rankAndDescribe(req,input,plan,items) {
@@ -183,9 +191,9 @@ async function rankAndDescribe(req,input,plan,items) {
   let result;
   try {
     result = await askModel(req,[
-      {role:'system',content:'你负责按用户真实任务筛选和排序 GitHub 仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"evidence_score":0,"quality_score":0,"title":"中文标题","summary":"中文说明","bullets":["能力证据"]}]}。必须为每个候选返回一项且不得修改 full_name。第一优先级是核心需求匹配：项目的主要输入、输出和能力必须真正帮助完成用户目标，仅有相邻关键词不算匹配。relevance_score 表示需求匹配程度；evidence_score 表示 README、Description、Topics 对关键能力的证据充分度；quality_score 表示文档、维护、可体验性和项目完成度。Star 与活跃度只能辅助排序，不能掩盖不相关。title 要直接说明项目解决的问题或提供的能力；summary 用具体自然的中文说明实际问题、解决方案和值得关注的新意，不堆术语。不得声称资料没有明确提供的功能。对技术项目可以解释可能带来的产品价值，但必须使用“可用于”“可能帮助”等措辞区分推测与事实。bullets 最多 2 条，只写资料可核验的能力。'},
+      {role:'system',content:'你负责按用户真实任务筛选和排序 GitHub 仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"evidence_score":0,"quality_score":0,"title":"中文标题","summary":"中文说明","bullets":["能力证据"]}]}。只返回真正相关且 relevance_score>=60 的项目，不要为不相关候选返回占位项；full_name 必须来自输入且不得修改。第一优先级是核心需求匹配：项目的主要输入、输出和能力必须真正帮助完成用户目标，仅有相邻关键词不算匹配。relevance_score 表示需求匹配程度；evidence_score 表示 README、Description、Topics 对关键能力的证据充分度；quality_score 表示文档、维护、可体验性和项目完成度。Star 与活跃度只能辅助排序，不能掩盖不相关。title 要直接说明项目解决的问题或提供的能力；summary 用具体自然的中文说明实际问题、解决方案和值得关注的新意，不堆术语。不得声称资料没有明确提供的功能。对技术项目可以解释可能带来的产品价值，但必须使用“可用于”“可能帮助”等措辞区分推测与事实。bullets 最多 2 条，只写资料可核验的能力。'},
       {role:'user',content:JSON.stringify({request:input,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,constraints:plan.constraints},candidates})}
-    ],6500);
+    ],4800);
   } catch {
     return fallbackRank(plan,items);
   }
@@ -247,7 +255,7 @@ module.exports = async function handler(req,res) {
     const diversified = new Map();
     for (const batch of batches) if (batch.status === 'fulfilled') {
       for (const item of batch.value) if (item?.full_name && !item.archived && !item.fork) all.set(item.full_name.toLowerCase(),shape(item));
-      for (const item of batch.value.slice(0,10)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
+      for (const item of batch.value.slice(0,8)) if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
     }
     const remainder = [...all.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
     for (const item of remainder) if (diversified.size < MAX_CANDIDATES) diversified.set(item.full_name.toLowerCase(),item);
