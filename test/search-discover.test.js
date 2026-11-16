@@ -33,6 +33,13 @@ test('兼容模型把检索词返回成对象数组',()=>{
   assert.equal(search.listText({purpose:'missing query'}),'');
 });
 
+test('入选能力必须能回查到仓库资料中的逐字证据',()=>{
+  const item = {description:'Open-source agent observability and evaluation platform',topics:['tracing'],readme_excerpt:'Trace every model call with OpenTelemetry.'};
+  assert.equal(search.evidenceSupported(item,['agent observability and evaluation','Trace every model call']),true);
+  assert.equal(search.evidenceSupported(item,['supports voice cloning']),false);
+  assert.equal(search.evidenceSupported(item,[]),false);
+});
+
 test('通用排序把匹配证据放在纯 Star 之前',()=>{
   const plan = {goal:'agent evaluation tracing',intent:'评测 Agent 并追踪调用',core_capabilities:['evaluation','tracing'],constraints:[],queries:['agent evaluation tracing']};
   const items = [
