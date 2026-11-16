@@ -215,11 +215,15 @@ function momentumScore(repo) {
 
 module.exports = async function handler(req,res) {
   res.setHeader('X-Content-Type-Options','nosniff');
-  res.setHeader('Cache-Control','no-store');
   if (req.method !== 'GET') return res.status(405).json({error:'method_not_allowed'});
   const page = Math.min(5,Math.max(1,Number(req.query?.page || 1)));
-  let token = '';
   const stored = getSession(req);
+  // Discovery is identical for all visitors. Cache only anonymous responses,
+  // never responses that may contain a refreshed GitHub session cookie.
+  res.setHeader('Cache-Control',stored ? 'private, no-store' : 'public, max-age=0, s-maxage=600, stale-while-revalidate=3600');
+  // Optional server-side read token avoids GitHub's 60-request/hour IP limit
+  // for anonymous visitors; never expose it to the browser.
+  let token = process.env.GITHUB_API_TOKEN || '';
   if (stored) {
     const auth = await refreshSession(stored).catch(()=>({}));
     if (auth.session) {
