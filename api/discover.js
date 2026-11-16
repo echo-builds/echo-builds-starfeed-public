@@ -34,7 +34,7 @@ async function askModel(req,messages,maxTokens = 5200) {
       method:'POST',
       headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
       body:JSON.stringify({model:MODEL,reasoning:{effort:'none'},temperature:0.1,max_tokens:maxTokens,messages}),
-      signal:AbortSignal.timeout(22000)
+      signal:AbortSignal.timeout(14000)
     });
     if (response.status !== 429 || attempt) break;
     await new Promise(resolve=>setTimeout(resolve,1200));
@@ -51,14 +51,14 @@ function githubHeaders(token,accept = 'application/vnd.github+json') {
 }
 
 async function githubJson(path,token) {
-  const response = await fetch(GITHUB_API + path,{headers:githubHeaders(token),signal:AbortSignal.timeout(12000)});
+  const response = await fetch(GITHUB_API + path,{headers:githubHeaders(token),signal:AbortSignal.timeout(7000)});
   if (response.status === 404) return null;
   if (!response.ok) throw new Error('github_' + response.status);
   return response.json();
 }
 
 async function githubText(path,token) {
-  const response = await fetch(GITHUB_API + path,{headers:githubHeaders(token,'application/vnd.github.raw+json'),signal:AbortSignal.timeout(12000)});
+  const response = await fetch(GITHUB_API + path,{headers:githubHeaders(token,'application/vnd.github.raw+json'),signal:AbortSignal.timeout(6000)});
   if (!response.ok) return '';
   return (await response.text()).slice(0,60000);
 }
