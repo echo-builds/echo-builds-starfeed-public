@@ -140,6 +140,13 @@ test('推荐价值信号包含技术基础设施而非只认终端产品',()=>{
   assert.equal(discover.attentionSignal({name:'recipes',description:'A personal cooking recipe collection',topics:['food']}),0);
 });
 
+test('推荐降级不会仅因 audio、video、design 等宽泛词收入普通工具',()=>{
+  assert.equal(discover.directAttentionSignal({name:'converter',description:'Offline file converter for PDF, video and audio',topics:['productivity']}),0);
+  assert.ok(discover.directAttentionSignal({name:'runtime',description:'On-device LLM inference runtime',topics:['edge-ai']}) > 0);
+  const unrelated = discover.fallbackCopy({name:'converter',description:'Offline file converter for PDF, video and audio',topics:[],stargazers_count:5000,forks_count:20,license:{spdx_id:'MIT'}},'new',null,'',null);
+  assert.equal(unrelated.relevant,false);
+});
+
 test('推荐文案必须带有能在仓库资料中逐字回查的证据',()=>{
   const candidate = {
     repo:{description:'Open-source LLM observability platform',topics:['evaluation']},
