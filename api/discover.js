@@ -58,9 +58,23 @@ async function githubJson(path,token) {
 }
 
 async function githubText(path,token) {
-  const response = await fetch(GITHUB_API + path,{headers:githubHeaders(token,'application/vnd.github.raw+json'),signal:AbortSignal.timeout(6000)});
-  if (!response.ok) return '';
-  return (await response.text()).slice(0,60000);
+  // Public README text should not consume GitHub REST API quota. The REST
+  // endpoint is kept as a fallback for repositories with unusual README paths.
+  const match = path.match(/^\/repos\/([^/]+)\/([^/]+)\/readme$/);
+  if (match) {
+    const repo = match[1] + '/' + match[2];
+    try {
+      const meta = await githubJson('/repos/' + repo,token);
+      const branch = encodeURIComponent(meta?.default_branch || 'main');
+      const raw = 'https://raw.githubusercontent.com/' + repo + '/' + branch + '/README.md';
+      const response = await fetch(raw,{headers:{'User-Agent':'RepoScroll'},signal:AbortSignal.timeout(10000)});
+      if (response.ok) return (await response.text()).slice(0,60000);
+    } catch {}
+  }
+  try {
+    const response = await fetch(GITHUB_API + path,{headers:githubHeaders(token,'application/vnd.github.raw+json'),signal:AbortSignal.timeout(10000)});
+    return response.ok ? (await response.text()).slice(0,60000) : '';
+  } catch { return ''; }
 }
 
 function shape(item) {
