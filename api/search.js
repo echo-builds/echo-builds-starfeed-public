@@ -3,7 +3,7 @@ const {getSession,refreshSession,setSession} = require('./_lib/session');
 const GITHUB_API = 'https://api.github.com';
 const GATEWAY_API = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const SEARCH_MODEL = process.env.SEARCH_MODEL || 'nvidia/nemotron-3.5-lightning-free';
-const TTS_QUERIES = ['TTS','Chinese TTS','multi-speaker TTS','text-to-speech','speech'];
+const TTS_QUERIES = ['TTS','text-to-speech','speech synthesis'];
 
 function isTtsRequest(input) {
   return /配音|语音合成|文字转语音|文本转语音|text.?to.?speech|\btts\b/i.test(input);
