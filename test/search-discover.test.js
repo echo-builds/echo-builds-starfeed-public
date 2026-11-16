@@ -225,3 +225,18 @@ test('推荐证据校验与发送给模型的 Markdown 去标记文本一致',()
   assert.equal(discover.recommendationEvidenceSupported(item,['Build AI agents for workflow automation with templates.']),true);
   assert.equal(discover.recommendationEvidenceSupported(item,['Includes offline video generation']),false);
 });
+
+test('产品封面可以从图片 alt 识别，忽略徽章和图标',()=>{
+  const repo = {full_name:'demo/repo',default_branch:'main'};
+  const readme = [
+    '![logo](./assets/app-icon.png)',
+    '![GitHub stars](https://img.shields.io/github/stars/demo/repo)',
+    '![cover-v5-optimized](./images/GitHub_README_if.png)',
+    '<img src="./docs/product_showcase.jpg" alt="Product showcase" />'
+  ].join('\n');
+  const images = discover.readmeImages(readme,repo);
+  assert.equal(images.length,2);
+  assert.ok(images.some(url=>url.endsWith('/GitHub_README_if.png')));
+  assert.ok(images.some(url=>url.endsWith('/product_showcase.jpg')));
+  assert.ok(!images.some(url=>url.includes('app-icon') || url.includes('shields.io')));
+});
