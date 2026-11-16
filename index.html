@@ -739,7 +739,7 @@ async function searchGitHub(input) {
   render();
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(()=>controller.abort(),45000);
+    const timeout = setTimeout(()=>controller.abort(),70000);
     const response = await fetch('/api/search',{
       method:'POST',
       headers:{'Content-Type':'application/json',Accept:'application/json'},
