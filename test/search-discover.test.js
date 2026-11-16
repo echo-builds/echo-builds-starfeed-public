@@ -119,6 +119,17 @@ test('推荐价值信号包含技术基础设施而非只认终端产品',()=>{
   assert.equal(discover.attentionSignal({name:'recipes',description:'A personal cooking recipe collection',topics:['food']}),0);
 });
 
+test('推荐文案必须带有能在仓库资料中逐字回查的证据',()=>{
+  const candidate = {
+    repo:{description:'Open-source LLM observability platform',topics:['evaluation']},
+    release:{name:'v2',body:'Adds agent tracing'},
+    readme:'Evaluate prompts and trace agent tool calls.'
+  };
+  assert.equal(discover.recommendationEvidenceSupported(candidate,['LLM observability platform','trace agent tool calls']),true);
+  assert.equal(discover.recommendationEvidenceSupported(candidate,['supports offline voice cloning']),false);
+  assert.equal(discover.recommendationEvidenceSupported(candidate,[]),false);
+});
+
 test('中文兜底不编造仓库没有提供的能力',()=>{
   const copy = discover.fallbackCopy({name:'sample',description:'A compact runtime',topics:[],stargazers_count:2000,forks_count:30,license:{spdx_id:'MIT'}},'new',null,'',null);
   assert.match(copy.summary,/仓库原始说明：A compact runtime/);
