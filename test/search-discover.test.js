@@ -184,6 +184,13 @@ test('推荐降级不会仅因 audio、video、design 等宽泛词收入普通�
   assert.equal(discover.fallbackCopy({name:'awesome-agent-tools',description:'A curated list of AI agent tools',topics:['ai'],stargazers_count:5000,forks_count:20,license:{spdx_id:'MIT'}},'new',null,'',null).relevant,false);
 });
 
+test('AI 相关性判断缺少合格逐字证据时只保留主元数据明确相关的项目',()=>{
+  const decision = {relevant:true,attention_score:80,quality_score:75};
+  assert.equal(discover.conservativeDecisionSupported({name:'filee',description:'Offline file converter for PDF, video and audio',topics:[]},decision),false);
+  assert.equal(discover.conservativeDecisionSupported({name:'n8n',description:'Workflow automation platform with native AI capabilities',topics:['ai']},decision),true);
+  assert.equal(discover.conservativeDecisionSupported({name:'awesome-agents',description:'A curated list of AI agent tools',topics:['ai']},decision),false);
+});
+
 test('推荐文案必须带有能在仓库资料中逐字回查的证据',()=>{
   const candidate = {
     repo:{description:'Open-source LLM observability platform',topics:['evaluation']},
