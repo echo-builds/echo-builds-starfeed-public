@@ -948,8 +948,10 @@ function renderReadmeMarkdown(markdown,node) {
       continue;
     }
     closeList();
+    const text = markdownText(line).replace(/^&emsp;$/i,'');
+    if (!text) continue;
     const paragraph = document.createElement('p');
-    paragraph.textContent = markdownText(line);
+    paragraph.textContent = text;
     node.append(paragraph);
   }
   if (code) node.append(code);
