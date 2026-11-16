@@ -921,7 +921,11 @@ async function hydrateReadme(repo,body,source,actions) {
     if (!data.readme_markdown) throw new Error('README content unavailable');
     if (state.openRepo !== repoKey(repo)) return;
     renderReadmeMarkdown(data.readme_markdown,body);
-    source.textContent = '内容来自项目 README';
+    source.textContent = data.translation_status === 'translated'
+      ? '已翻译为中文 · 内容来自项目 README'
+      : data.translation_status === 'original_chinese'
+        ? 'README 原文（中文）'
+        : '当前显示 README 原文（中文翻译暂不可用）';
     appendExperience(actions,data.experience);
   } catch {
     if (state.openRepo !== repoKey(repo)) return;
@@ -947,7 +951,7 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   details.replaceChildren(header,meta);
   const readmeBody = document.createElement('article');
   readmeBody.className = 'readme-body';
-  readmeBody.append(paragraph('正在读取并翻译 README 中的产品介绍…','loading-copy'));
+  readmeBody.append(paragraph('正在读取 README 中的产品介绍…','loading-copy'));
   const readmeSource = paragraph('','readme-source');
   details.append(readmeBody,readmeSource);
   const actions = document.createElement('div');
