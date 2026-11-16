@@ -258,6 +258,10 @@ async function classify(req,candidates) {
       /ai_gateway_\d+/.test(message) ? message.match(/ai_gateway_\d+/)[0] :
       /invalid_ai_response/.test(message) ? 'invalid_ai_response' :
       /timeout|abort/i.test(message) ? 'ai_timeout' : 'ai_request_failed';
+    empty.failure_type = error?.name === 'SyntaxError' ? 'model_json_parse' :
+      error?.name === 'TypeError' ? 'network_or_response_type' :
+      error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'timeout' :
+      'other';
     return empty;
   }
 }
@@ -417,7 +421,7 @@ module.exports = async function handler(req,res) {
     }
     for (const item of items) delete item.candidate_kind;
 
-    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:classifierMode,diagnostics:{readme_fetched:enriched.filter(item=>item.readme.length>0).length,readme_candidates:enriched.length,ai_status:decisions.failure || (aiClassified?'ok':'empty_response')}});
+    return res.status(200).json({items,page,next_page:page + 1,has_more:page < 5,method:'recent_high_star_or_release_with_pm_value',classifier:classifierMode,diagnostics:{readme_fetched:enriched.filter(item=>item.readme.length>0).length,readme_candidates:enriched.length,ai_status:decisions.failure || (aiClassified?'ok':'empty_response'),ai_error_type:decisions.failure_type || null}});
   } catch (error) {
     return res.status(502).json({error:'discover_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
