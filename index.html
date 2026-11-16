@@ -110,8 +110,7 @@ dialog::backdrop{background:#18161280}
 .readme-body .loading-copy{color:var(--muted)}
 .readme-source{font-size:12px;color:var(--muted);margin-top:-10px}
 .readme-source a{text-decoration:underline;text-underline-offset:2px}
-.actions{display:grid;grid-template-columns:1fr 1.08fr .72fr;gap:8px;padding-top:12px;border-top:1px solid var(--rule)}
-.actions.two{grid-template-columns:1fr 1fr}
+.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px;padding-top:12px;border-top:1px solid var(--rule)}
 .actions>*{min-width:0;padding-inline:7px;text-align:center}
 .save-status{font-size:12px;color:var(--muted)}
 .auth-panel{padding:22px 20px 28px}
@@ -507,13 +506,21 @@ const state = {
   search:{query:'',items:[],loading:false,error:''}
 };
 const titleOf = repo => repo.title || repo.name || repo.full_name.split('/')[1];
-const experienceOf = repo => {
-  const trial = safeUrl(repo.trial);
-  if (trial) return {url:trial,label:'在线体验'};
-  const download = safeUrl(repo.downloadUrl);
-  if (download) return {url:download,label:repo.downloadLabel || '下载体验'};
-  return null;
-};
+function projectLinks(repo) {
+  const links = [];
+  const seen = new Set();
+  const add = (url,label)=>{
+    const safe = safeUrl(url);
+    if (!safe || seen.has(safe) || safe === safeUrl(repo.url)) return;
+    seen.add(safe);
+    links.push({url:safe,label});
+  };
+  add(repo.trial,'在线体验');
+  if (!repo.trial && repo.homepage && !/github\.com/i.test(repo.homepage)) add(repo.homepage,'产品主页');
+  add(repo.downloadUrl,repo.downloadLabel || '下载最新版本');
+  add(repo.release?.html_url,'下载最新版本');
+  return links;
+}
 const detailReady = repo => validRepo(repo);
 const hasChinese = value => /[㐀-鿿]/.test(String(value || ''));
 const preparedCopy = repo => Boolean(notes[repoKey(repo)] || repo.ai_summary || hasChinese(repo.description));
@@ -933,7 +940,17 @@ function renderReadmeMarkdown(markdown,node) {
   }
   if (code) node.append(code);
 }
-async function hydrateReadme(repo,body,source) {
+function appendProjectLinks(actions,links) {
+  const save = actions.querySelector('.save');
+  const existing = new Set([...actions.querySelectorAll('a')].map(link=>link.href));
+  for (const item of Array.isArray(links) ? links : []) {
+    const url = safeUrl(item?.url);
+    if (!url || existing.has(url)) continue;
+    existing.add(url);
+    actions.insertBefore(external(url,item.label || '在线体验','primary'),save);
+  }
+}
+async function hydrateReadme(repo,body,source,actions) {
   try {
     const response = await fetch('/api/project?repo=' + encodeURIComponent(repo.full_name),{headers:{Accept:'application/json'},signal:AbortSignal.timeout(40000)});
     if (!response.ok) throw new Error('Project HTTP ' + response.status);
@@ -942,6 +959,7 @@ async function hydrateReadme(repo,body,source) {
     if (state.openRepo !== repoKey(repo)) return;
     renderReadmeMarkdown(data.readme_markdown,body);
     source.textContent = '内容来自项目 README';
+    appendProjectLinks(actions,data.links);
   } catch {
     if (state.openRepo !== repoKey(repo)) return;
     body.replaceChildren(section('项目简介',repo.summary || 'README 暂时无法读取，请稍后重试。'));
@@ -971,9 +989,8 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   details.append(readmeBody,readmeSource);
   const actions = document.createElement('div');
   actions.className = 'actions';
-  const experience = experienceOf(repo);
   actions.append(external(repo.url,'查看 GitHub'));
-  if (experience) actions.append(external(experience.url,experience.label,'primary'));
+  appendProjectLinks(actions,projectLinks(repo));
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'secondary save';
@@ -1000,7 +1017,6 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
     }
   });
   actions.append(save);
-  if (!experience) actions.classList.add('two');
   const notice = paragraph('','save-status');
   notice.id = 'save-status';
   notice.setAttribute('role','status');
@@ -1008,7 +1024,7 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   details.append(actions,notice);
   $('#detail').showModal();
   $('#detail').scrollTop = 0;
-  hydrateReadme(repo,readmeBody,readmeSource);
+  hydrateReadme(repo,readmeBody,readmeSource,actions);
 }
 function openRouteDetail() {
   const wanted = new URLSearchParams(location.search).get('repo');
