@@ -73,6 +73,8 @@ h1{font-size:31px;line-height:1.15;letter-spacing:-.03em;margin:0 0 5px}
 .search-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(58px + env(safe-area-inset-bottom));z-index:3;width:min(420px,calc(100% - 20px));padding:8px 0}
 .search-dock form{display:flex;align-items:center;gap:5px;min-height:48px;padding:5px 5px 5px 15px;border:1px solid #dfd8d1;border-radius:25px;background:rgba(255,255,255,.97);box-shadow:0 7px 25px #32251b1a;backdrop-filter:blur(14px)}
 .search-dock input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--ink);font:14px/1.4 inherit;padding:7px 0}
+.search-dock input[type="search"]{-webkit-appearance:textfield;appearance:textfield}
+.search-dock input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none;display:none}
 .search-dock input::placeholder{color:#8b847d}
 .search-clear,.search-submit{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border:0;border-radius:50%;font-size:22px;line-height:1}
 .search-clear{background:transparent;color:var(--muted)}
@@ -133,6 +135,12 @@ dialog::backdrop{background:#18161280}
 @media(min-width:950px){.header-inner{max-width:1180px;height:64px;padding-inline:24px;justify-content:flex-start;gap:18px}.top-nav{display:flex}.header-actions{margin-left:auto}.feed{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 15px}.text-cover{padding:16px}.card-copy h2{font-size:16px}.card{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.card:hover{transform:translateY(-3px);border-color:#ddd2c8;box-shadow:0 12px 30px #38281914}main{max-width:1180px;padding:34px 24px 80px}.heading{padding-bottom:20px}.heading h1{font-size:38px}.search-dock{top:9px;bottom:auto;width:min(390px,34vw);padding:0;z-index:4}.search-dock form{min-height:46px;box-shadow:none;background:#fff}.bottom{display:none}dialog{width:min(720px,calc(100vw - 80px));box-shadow:0 30px 90px #18161238}#details{padding:30px 32px 34px}}
 
 .feed.masonry{grid-auto-rows:1px;row-gap:0}
+.search-skeleton{min-height:330px;overflow:hidden;background:#fff}
+.search-skeleton-cover{height:245px;background:linear-gradient(100deg,#f0ece7 20%,#faf8f5 40%,#f0ece7 60%);background-size:220% 100%;animation:search-shimmer 1.25s ease-in-out infinite}
+.search-skeleton-lines{padding:14px 13px}
+.search-skeleton-line{height:13px;border-radius:999px;background:#eee9e4;margin-bottom:10px}
+.search-skeleton-line:last-child{width:58%;margin-bottom:0}
+@keyframes search-shimmer{to{background-position:-220% 0}}
 
 </style>
   <title>RepoScroll · 发现 GitHub 项目</title>
@@ -591,7 +599,7 @@ function loadMeta(repo, force = false) {
 function updateStatus(message = '') {
   const node = $('#status');
   if (state.view === 'search') {
-    node.textContent = message || (state.search.loading ? '正在理解需求并搜索整个 GitHub…' : state.search.error || state.search.hint || (state.search.items.length ? `从整个 GitHub 找到 ${state.search.items.length} 个项目，按 Star 从高到低排序` : '换一种说法再试试'));
+    node.textContent = message || (state.search.loading ? '正在理解你真正想要的能力，并筛选高质量项目…' : state.search.error || '');
     node.hidden = !node.textContent;
     return;
   }
@@ -712,6 +720,9 @@ const searchRules = [
   [/手机|安卓|android|mobile/i,['android']], [/苹果|ios|iphone/i,['ios']]
 ];
 function naturalSearchQuery(input) {
+  if (/配音|语音合成|文字转语音|文本转语音|text.?to.?speech|\btts\b/i.test(input)) {
+    return 'text-to-speech in:name,description,readme stars:>=100 archived:false fork:false';
+  }
   const terms = [];
   for (const [pattern,values] of searchRules) if (pattern.test(input)) terms.push(...values);
   const english = input.toLowerCase().match(/[a-z][a-z0-9-]{2,}/g) || [];
@@ -785,7 +796,7 @@ async function searchGitHub(input) {
   render();
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(()=>controller.abort(),25000);
+    const timeout = setTimeout(()=>controller.abort(),45000);
     const response = await fetch('/api/search',{
       method:'POST',
       headers:{'Content-Type':'application/json',Accept:'application/json'},
@@ -828,6 +839,13 @@ function card(repo) {
   trigger.dataset.project = repoKey(repo);
   trigger.setAttribute('aria-label',`${titleOf(repo)}，查看项目详情`);
   trigger.addEventListener('click',()=>openDetails(repo,trigger));
+  return el;
+}
+function searchSkeleton() {
+  const el = document.createElement('article');
+  el.className = 'card search-skeleton';
+  el.setAttribute('aria-hidden','true');
+  el.innerHTML = '<div class="search-skeleton-cover"></div><div class="search-skeleton-lines"><div class="search-skeleton-line"></div><div class="search-skeleton-line"></div></div>';
   return el;
 }
 function external(url,text,style='secondary') {
@@ -1064,7 +1082,8 @@ function render() {
   const headingWrap = document.querySelector('.heading');
   headingWrap.classList.toggle('discover-heading',!savedView && !searchView);
   $('#heading').textContent = savedView ? '收藏' : searchView ? '搜索结果' : '';
-  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? `“${state.search.query}”` : '发现近期新创建或刚完成重要迭代的高星项目，聚焦与 AI 产品经理息息相关的产品与工具';
+  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? '' : '发现近期新创建或刚完成重要迭代的高星项目，聚焦与 AI 产品经理息息相关的产品与工具';
+  $('#lede').hidden = searchView;
   $('#search-dock').hidden = savedView;
   for (const tab of document.querySelectorAll('[data-view]')) {
     if (tab.dataset.view === state.view || (searchView && tab.dataset.view === 'discover')) tab.setAttribute('aria-current','page'); else tab.removeAttribute('aria-current');
@@ -1092,12 +1111,14 @@ function render() {
       groups.append(section);
       observeCards(list);
     }
+  } else if (searchView && state.search.loading) {
+    feed.append(...Array.from({length:6},searchSkeleton));
   } else {
     feed.append(...items.map(card));
     observeCards(feed);
   }
   const empty = $('#empty');
-  empty.hidden = items.length > 0;
+  empty.hidden = state.search.loading || items.length > 0;
   empty.querySelector('h2').textContent = savedView ? '还没有收藏' : searchView ? '没有找到合适的项目' : '暂时没有新项目';
   empty.querySelector('p').textContent = savedView ? '打开项目详情后，可以把想留着看的项目收进这里。' : searchView ? '换一个更具体的说法，例如“把播客转成中文字幕”。' : '晚点再回来发现新项目。';
   empty.querySelector('button').hidden = !savedView;
