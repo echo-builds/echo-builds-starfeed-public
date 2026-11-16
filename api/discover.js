@@ -57,15 +57,14 @@ async function githubJson(path,token) {
   return response.json();
 }
 
-async function githubText(path,token) {
+async function githubText(path,token,branchHint = 'main') {
   // Public README text should not consume GitHub REST API quota. The REST
   // endpoint is kept as a fallback for repositories with unusual README paths.
   const match = path.match(/^\/repos\/([^/]+)\/([^/]+)\/readme$/);
   if (match) {
     const repo = match[1] + '/' + match[2];
     try {
-      const meta = await githubJson('/repos/' + repo,token);
-      const branch = encodeURIComponent(meta?.default_branch || 'main');
+      const branch = encodeURIComponent(branchHint || 'main');
       const raw = 'https://raw.githubusercontent.com/' + repo + '/' + branch + '/README.md';
       const response = await fetch(raw,{headers:{'User-Agent':'RepoScroll'},signal:AbortSignal.timeout(10000)});
       if (response.ok) return (await response.text()).slice(0,60000);
@@ -319,7 +318,7 @@ module.exports = async function handler(req,res) {
     for (const item of [...newRepos,...oldWithRelease]) merged.set(item.repo.full_name.toLowerCase(),item);
     const base = [...merged.values()].slice(0,30);
     const enriched = await Promise.all(base.map(async item=>{
-      const readme = await githubText(`/repos/${item.repo.full_name}/readme`,token).catch(()=>'');
+      const readme = await githubText(`/repos/${item.repo.full_name}/readme`,token,item.repo.default_branch).catch(()=>'');
       return {...item,readme,cover:readmeImages(readme,item.repo)[0] || null};
     }));
     const decisions = await classify(req,enriched);
