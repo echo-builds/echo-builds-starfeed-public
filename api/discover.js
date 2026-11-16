@@ -183,7 +183,7 @@ module.exports = async function handler(req,res) {
       const freshnessDate = item.kind === 'new' ? item.repo.created_at : item.release?.published_at;
       const freshness = Math.max(0,90 - Math.max(0,(now - Date.parse(freshnessDate || 0)) / DAY));
       const heat = Math.log10(Math.max(10,item.repo.stargazers_count || 0)) * 20 + freshness + Number(decision.quality_score || 0) * .35;
-      return [{...item.repo,cover:item.cover,ai_title:clean(decision.title,60) || item.repo.name,ai_summary:clean(decision.summary,180) || clean(item.repo.description,180),selection_reason:item.kind === 'new' ? '近期新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url} : null,quality_score:Number(decision.quality_score || 0),heat_score:heat,candidate_kind:item.kind}];
+      return [{...item.repo,cover:item.cover,ai_title:clean(decision.title,60) || item.repo.name,ai_summary:clean(decision.summary,180) || clean(item.repo.description,180),selection_reason:item.kind === 'new' ? '近期新项目' : `近期发布 ${item.release?.tag_name || '重要版本'}`,release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url,has_assets:Array.isArray(item.release.assets) && item.release.assets.length > 0} : null,quality_score:Number(decision.quality_score || 0),heat_score:heat,candidate_kind:item.kind}];
     });
     const newItems = scored.filter(item=>item.candidate_kind === 'new').sort((a,b)=>b.heat_score-a.heat_score);
     const releaseItems = scored.filter(item=>item.candidate_kind === 'release').sort((a,b)=>b.heat_score-a.heat_score);
