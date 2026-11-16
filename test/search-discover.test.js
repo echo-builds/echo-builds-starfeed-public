@@ -28,6 +28,11 @@ test('通用降级计划可处理十类需求且不注入固定领域查询',()=
   assert.ok(neutral.queries.every(query=>!/^TTS$|text-to-speech|speech synthesis/i.test(query)));
 });
 
+test('兼容模型把检索词返回成对象数组',()=>{
+  assert.deepEqual(search.unique([{query:'agent evaluation'},{terms:['tool','tracing']},{value:'self hosted'}],5),['agent evaluation','tool tracing','self hosted']);
+  assert.equal(search.listText({purpose:'missing query'}),'');
+});
+
 test('通用排序把匹配证据放在纯 Star 之前',()=>{
   const plan = {goal:'agent evaluation tracing',intent:'评测 Agent 并追踪调用',core_capabilities:['evaluation','tracing'],constraints:[],queries:['agent evaluation tracing']};
   const items = [
