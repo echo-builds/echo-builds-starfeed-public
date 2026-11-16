@@ -304,3 +304,40 @@ test('千问使用 Cloudflare Workers AI 免费路径，且不会自动调用付
     }
   }
 });
+
+test('Cloudflare Qwen 请求使用正确端点并解析自然语言搜索的 JSON',async()=>{
+  const freeAI = require('../api/_lib/free-ai');
+  const original = {
+    provider:process.env.FREE_AI_PROVIDER,
+    account:process.env.CLOUDFLARE_ACCOUNT_ID,
+    token:process.env.CLOUDFLARE_API_TOKEN
+  };
+  const originalFetch=global.fetch;
+  let requested;
+  try {
+    process.env.FREE_AI_PROVIDER='cloudflare-qwen';
+    process.env.CLOUDFLARE_ACCOUNT_ID='0123456789abcdef0123456789abcdef';
+    process.env.CLOUDFLARE_API_TOKEN='test-secret-not-real';
+    global.fetch=async (url,options)=>{
+      requested={url,options};
+      return {
+        ok:true,
+        json:async()=>({choices:[{message:{content:'{"intent":"寻找开源工具","queries":["workflow automation","agent tools"]}'}}]})
+      };
+    };
+    const result=await freeAI.generateJSON([{role:'user',content:'找能自动完成任务的开源工具'}]);
+    assert.equal(requested.url,'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/v1/chat/completions');
+    assert.equal(JSON.parse(requested.options.body).model,'@cf/qwen/qwen3.8-27b');
+    assert.deepEqual(result.queries,['workflow automation','agent tools']);
+  } finally {
+    global.fetch=originalFetch;
+    for (const [key,value] of Object.entries({
+      FREE_AI_PROVIDER:original.provider,
+      CLOUDFLARE_ACCOUNT_ID:original.account,
+      CLOUDFLARE_API_TOKEN:original.token
+    })) {
+      if (value===undefined) delete process.env[key];
+      else process.env[key]=value;
+    }
+  }
+});
