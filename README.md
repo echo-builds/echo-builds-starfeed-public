@@ -76,4 +76,14 @@ python3 -m http.server 4173
 
 随后打开 http://localhost:4173 。GitHub 登录、Stars 同步、推荐与搜索接口依赖 Vercel Functions，静态预览不能完整运行这些能力。
 
-Vercel 部署需要配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` 和 `SESSION_SECRET`；AI 功能依赖部署环境中的 AI Gateway 凭证。
+Vercel 部署需要配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` 和 `SESSION_SECRET`。
+
+### 免费运行与可选 AI 配置
+
+- **默认零模型请求**：推荐流优先使用已核对的中文内容；新仓库仍可进入推荐，但可能显示原始简介。GitHub 登录、Stars、推荐流不要求模型 API Key。
+- **如需自然语言搜索与 README 中文翻译**：可以自行申请 Google AI Studio 的 Gemini API Key，并在 Vercel 配置 `GEMINI_API_KEY` 与 `ENABLE_FREE_GEMINI=true`。模型默认为 `gemini-2.5-flash-lite`，可通过 `GEMINI_FREE_MODEL` 修改。
+- **免费额度用尽**：自动回退为 GitHub 检索和原始 README，不会切换到 Vercel AI Gateway 或其他付费模型。免费 Gemini 是否可用、限额和收费状态以 Google AI Studio 中该项目的实际设置为准；为确保不产生费用，请使用未启用付费结算的免费层项目。
+- **可选的首页 AI 分类**：只有额外配置 `ENABLE_LIVE_DISCOVERY_AI=true` 才会调用模型，不建议免费部署开启；默认关闭。
+- **可选 GitHub 读取凭证**：`GITHUB_API_TOKEN` 可提高 GitHub API 读取额度，不是必须项。
+
+本地只启动静态服务器时无法运行后端接口；完整使用需要部署 Vercel Functions。
