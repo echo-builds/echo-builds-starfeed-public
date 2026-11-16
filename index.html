@@ -506,20 +506,13 @@ const state = {
   search:{query:'',items:[],loading:false,error:''}
 };
 const titleOf = repo => repo.title || repo.name || repo.full_name.split('/')[1];
-function projectLinks(repo) {
-  const links = [];
-  const seen = new Set();
-  const add = (url,label)=>{
-    const safe = safeUrl(url);
-    if (!safe || seen.has(safe) || safe === safeUrl(repo.url)) return;
-    seen.add(safe);
-    links.push({url:safe,label});
-  };
-  add(repo.trial,'在线体验');
-  if (!repo.trial && repo.homepage && !/github\.com/i.test(repo.homepage)) add(repo.homepage,'产品主页');
-  add(repo.downloadUrl,repo.downloadLabel || '下载最新版本');
-  add(repo.release?.html_url,'下载最新版本');
-  return links;
+function experienceOf(repo) {
+  const trial = safeUrl(repo.trial);
+  if (trial) return {url:trial,mode:'online'};
+  const download = safeUrl(repo.downloadUrl);
+  if (download) return {url:download,mode:'download'};
+  const release = repo.release?.has_assets ? safeUrl(repo.release.html_url) : null;
+  return release ? {url:release,mode:'download'} : null;
 }
 const detailReady = repo => validRepo(repo);
 const hasChinese = value => /[㐀-鿿]/.test(String(value || ''));
@@ -940,15 +933,12 @@ function renderReadmeMarkdown(markdown,node) {
   }
   if (code) node.append(code);
 }
-function appendProjectLinks(actions,links) {
-  const save = actions.querySelector('.save');
-  const existing = new Set([...actions.querySelectorAll('a')].map(link=>link.href));
-  for (const item of Array.isArray(links) ? links : []) {
-    const url = safeUrl(item?.url);
-    if (!url || existing.has(url)) continue;
-    existing.add(url);
-    actions.insertBefore(external(url,item.label || '在线体验','primary'),save);
-  }
+function appendExperience(actions,experience) {
+  const url = safeUrl(experience?.url);
+  if (!url || actions.querySelector('.experience-action')) return;
+  const link = external(url,'开始使用','primary');
+  link.classList.add('experience-action');
+  actions.insertBefore(link,actions.querySelector('.save'));
 }
 async function hydrateReadme(repo,body,source,actions) {
   try {
@@ -959,7 +949,7 @@ async function hydrateReadme(repo,body,source,actions) {
     if (state.openRepo !== repoKey(repo)) return;
     renderReadmeMarkdown(data.readme_markdown,body);
     source.textContent = '内容来自项目 README';
-    appendProjectLinks(actions,data.links);
+    appendExperience(actions,data.experience);
   } catch {
     if (state.openRepo !== repoKey(repo)) return;
     body.replaceChildren(section('项目简介',repo.summary || 'README 暂时无法读取，请稍后重试。'));
@@ -990,7 +980,7 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   const actions = document.createElement('div');
   actions.className = 'actions';
   actions.append(external(repo.url,'查看 GitHub'));
-  appendProjectLinks(actions,projectLinks(repo));
+  appendExperience(actions,experienceOf(repo));
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'secondary save';
