@@ -1,0 +1,40 @@
+name: Refresh migrated file dates
+
+on:
+  push:
+    paths:
+      - .github/workflows/refresh-migrated-file-dates.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-dates:
+    if: github.event.head_commit.message == 'chore: refresh migrated file dates'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Recommit every tracked file without changing final contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "echo-builds"
+          git config user.email "225653594+echo-builds@users.noreply.github.com"
+          base="$(git rev-parse HEAD^)"
+          while IFS= read -r -d '' entry; do
+            mode="${entry%% *}"
+            rest="${entry#* }"
+            rest="${rest#* }"
+            path="${rest#*$'\t'}"
+            case "$mode" in
+              100644) git update-index --chmod=+x -- "$path" ;;
+              100755) git update-index --chmod=-x -- "$path" ;;
+            esac
+          done < <(git ls-tree -r -z "$base")
+          git commit -m "chore: mark migrated files as refreshed"
+          git read-tree --reset -u "$base"
+          git commit -m "chore: publish migrated snapshot"
+          git push origin HEAD:main
