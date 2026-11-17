@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   refresh-dates:
-    if: github.event.head_commit.message == 'chore: refresh migrated file dates'
     runs-on: ubuntu-latest
     steps:
       - name: Check out full history
@@ -23,7 +22,7 @@ jobs:
           set -euo pipefail
           git config user.name "echo-builds"
           git config user.email "225653594+echo-builds@users.noreply.github.com"
-          base="$(git rev-parse HEAD^)"
+          base="$(git rev-parse HEAD^^)"
           while IFS= read -r -d '' entry; do
             mode="${entry%% *}"
             rest="${entry#* }"
