@@ -96,11 +96,21 @@ function evidenceSupported(source,quote) {
 }
 async function classify(items) {
   if (!items.length || !freeAI.enabled()) return new Map();
-  const result=await freeAI.generateJSON([
-    {role:'system',content:'你为“AI 产品经理值得了解的 GitHub 项目”做严格入选判断。项目不必使用 AI，但必须至少影响一个产品判断：AI 能力边界、用户体验与交互、产品实现路径、数据与运营、成本安全风险。排除教程、资源合集、批量克隆、只有技术名词但没有明确用途的仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","keep":true,"category":"ai_capability|ai_product|product_building|product_operations|product_inspiration","title":"具体中文标题","summary":"一句话说明用户问题和解决方式","reason":"为什么 AI 产品经理此刻值得了解","evidence_quote":"候选材料中的逐字原文","release_important":false,"release_reason":""}]}。没有逐字证据不得 keep=true；不要为了数量降低标准。'},
-    {role:'user',content:JSON.stringify({candidates:items.map(item=>({full_name:item.repo.full_name,description:item.repo.description,topics:item.repo.topics,stars:item.repo.stargazers_count,created_at:item.repo.created_at,latest_release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,body:clean(item.release.body,1600)} : null,readme_excerpt:clean(item.readme,5000)}))})}
-  ],{maxTokens:4000,timeoutMs:25000});
-  return new Map((Array.isArray(result?.items)?result.items:[]).map(item=>[String(item.full_name || '').toLowerCase(),item]));
+  const decisions=new Map();
+  const system='你为“AI 产品经理值得了解的 GitHub 项目”做严格入选判断。项目不必使用 AI，但必须至少影响一个产品判断：AI 能力边界、用户体验与交互、产品实现路径、数据与运营、成本安全风险。排除教程、资源合集、批量克隆、只有技术名词但没有明确用途的仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","keep":true,"category":"ai_capability|ai_product|product_building|product_operations|product_inspiration","title":"具体中文标题","summary":"一句话说明用户问题和解决方式","reason":"为什么 AI 产品经理此刻值得了解","evidence_quote":"候选材料中的逐字原文","release_important":false,"release_reason":""}]}。没有逐字证据不得 keep=true；不要为了数量降低标准。只有当 Release 带来用户可感知的新能力、新交互或工作流，显著改变部署成本、性能、安全性或兼容性，或属于重要主版本时，release_important 才能为 true；依赖升级、文档修改、小修复和常规维护均为 false。';
+  for (let index=0;index<items.length;index+=10) {
+    const batch=items.slice(index,index+10);
+    try {
+      const result=await freeAI.generateJSON([
+        {role:'system',content:system},
+        {role:'user',content:JSON.stringify({candidates:batch.map(item=>({full_name:item.repo.full_name,description:item.repo.description,topics:item.repo.topics,stars:item.repo.stargazers_count,created_at:item.repo.created_at,latest_release:item.release ? {tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,body:clean(item.release.body,1000)} : null,readme_excerpt:clean(item.readme,2200)}))})}
+      ],{maxTokens:3000,timeoutMs:30000});
+      for (const item of Array.isArray(result?.items)?result.items:[]) decisions.set(String(item.full_name || '').toLowerCase(),item);
+    } catch(error) {
+      console.warn(`classification_batch_${index / 10 + 1}_failed`,String(error?.message || error).slice(0,120));
+    }
+  }
+  return decisions;
 }
 async function previousSnapshot(db,fullNameKey) {
   const rows=await db`SELECT stars,observed_at FROM repo_snapshots WHERE project_full_name_key=${fullNameKey} ORDER BY observed_at DESC LIMIT 1`;
@@ -131,7 +141,8 @@ async function main() {
       if (repo?.full_name && !candidateMap.has(row.full_name_key)) candidateMap.set(row.full_name_key,{repo,lane:repo.attention_category || laneFor(repo),existing:true});
     }
     const candidates=[];
-    for (const entry of [...candidateMap.values()].filter(({repo})=>!repo.archived&&!repo.fork&&!suspicious(repo)).sort((a,b)=>initialScore(b.repo)-initialScore(a.repo)).slice(0,backfillTarget ? 220 : 48)) {
+    const candidateLimit=backfillTarget ? Math.min(500,Math.max(220,Math.ceil(backfillTarget*1.5))) : 48;
+    for (const entry of [...candidateMap.values()].filter(({repo})=>!repo.archived&&!repo.fork&&!suspicious(repo)).sort((a,b)=>initialScore(b.repo)-initialScore(a.repo)).slice(0,candidateLimit)) {
       const repo=entry.repo;
       const fullNameKey=keyOf(repo);
       const previous=await previousSnapshot(db,fullNameKey);
@@ -143,12 +154,14 @@ async function main() {
       if (text.length<400 || isCollection(repo,text)) continue;
       const release=await github(`/repos/${repo.full_name}/releases/latest`).catch(()=>null);
       candidates.push({...entry,readme:text,release,starVelocity});
-      if (candidates.length >= (backfillTarget ? Math.min(backfillTarget,60) : 24)) break;
+      if (candidates.length >= (backfillTarget || 24)) break;
     }
     const decisions=await classify(candidates).catch(()=>new Map());
-    for (const item of candidates) {
+    const publishOrder=[...candidates].sort((a,b)=>(initialScore(a.repo)+a.starVelocity)-(initialScore(b.repo)+b.starVelocity));
+    for (const item of publishOrder) {
       const repo=item.repo;
       const fullNameKey=keyOf(repo);
+      if (item.existing) await db`UPDATE projects SET last_scanned_at=now() WHERE full_name_key=${fullNameKey}`;
       const cached=verified[fullNameKey];
       const decision=decisions.get(fullNameKey);
       const category=decision?.category || item.lane || laneFor(repo);
