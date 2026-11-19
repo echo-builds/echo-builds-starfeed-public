@@ -40,7 +40,7 @@ jobs:
           node --input-type=module <<'NODE'
           const url = "https://echo-builds-starfeed.vercel.app/api/discover?page=1";
           console.log("Checking:", url);
-          console.log("Validating Cloudflare Qwen request format and production homepage");
+          console.log("Validating Cloudflare Workers AI free path and production homepage");
           const response = await fetch(url, {
             headers: {Accept: "application/json", "User-Agent": "RepoScroll-Feed-Audit/1.0"},
             signal: AbortSignal.timeout(120000)
