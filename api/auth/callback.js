@@ -38,7 +38,7 @@ module.exports = async function handler(req,res) {
       expiresAt:Date.now() + Number(token.expires_in || 28800) * 1000,
       refreshToken:token.refresh_token || null,
       refreshTokenExpiresAt:Date.now() + Number(token.refresh_token_expires_in || 15552000) * 1000,
-      user:{login:user.login,avatar_url:user.avatar_url}
+      user:{id:user.id,login:user.login,avatar_url:user.avatar_url}
     });
     res.redirect(302,withConnected(pending.returnTo,'success'));
   } catch {
