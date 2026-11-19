@@ -607,8 +607,9 @@ async function rankAndDescribe(req,input,plan,items) {
     direct:required.length ? capabilityMatchCount(item,required,true) : 1
   })).sort((a,b)=>Number(b.item._semantic_score || 0)-Number(a.item._semantic_score || 0) || b.direct-a.direct || b.matched-a.matched || Number(a.item._search_query_index ?? 99)-Number(b.item._search_query_index ?? 99) || Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || Number(b.item.stargazers_count || 0)-Number(a.item.stargazers_count || 0));
   const priorityQueryCount = Math.max(1,(plan.query_specs || []).filter(spec=>spec.kind === 'workflow' || spec.kind === 'localized').length);
-  const pool = buildRankingPool(scored,priorityQueryCount);
-  if (!pool.some(entry=>Number(entry.item._semantic_score || 0) > 0)) try {
+  const hasSemanticScores = scored.some(entry=>Number(entry.item._semantic_score || 0) > 0);
+  const pool = buildRankingPool(scored,priorityQueryCount,hasSemanticScores ? 32 : RANKING_POOL_SIZE);
+  if (!hasSemanticScores) try {
     const result = await askModel(req,[
       {role:'system',content:'你是严格的 GitHub 项目研究员，只输出 JSON：{"items":[{"full_name":"owner/repo","fit_score":0,"title":"中文标题","summary":"适合原因","capability_evidence":[{"capability":"必须能力原名","evidence_quote":"候选资料逐字原文"}],"strengths":["已证明优势"],"limitations":["缺口或未验证项"]}]}。只返回最多6个值得推荐的项目，省略不相关候选，不要输出 keep=false。逐项核对输入、输出、必须能力和限制；完整方案优先，部分组件可保留但必须写清缺口。逐字证据不得改写。关键词偶然出现、相邻能力、教程或资源列表不推荐。主观体验没有试听或实测时必须写“尚未试听/实测，不能保证”。'},
       {role:'user',content:JSON.stringify({request:input,goal:plan.goal,required_capabilities:required.map(check=>check.name),constraints:plan.constraints,candidates:pool.map(({item})=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,readme_excerpt:clean(item.readme_excerpt,700)}))})}
