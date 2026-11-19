@@ -181,6 +181,18 @@ test('完整产品查主元数据，组件才查 README 全文',()=>{
   assert.equal(search.githubSearchScope('component'),'in:name,description,readme,topics');
 });
 
+test('未登录只查完整产品，登录后才补充组件检索',()=>{
+  const plan={query_specs:[
+    {query:'product action',kind:'workflow'},
+    {query:'capability signature',kind:'workflow'},
+    {query:'本地 产品 动作',kind:'localized'},
+    {query:'input component',kind:'component'},
+    {query:'output component',kind:'component'}
+  ]};
+  assert.deepEqual(search.activeQuerySpecs(plan,false).map(spec=>spec.query),['product action','capability signature','本地 产品 动作']);
+  assert.equal(search.activeQuerySpecs(plan,true).length,5);
+});
+
 test('资源链接合集不会作为可运行产品进入推荐',()=>{
   assert.equal(search.isCollectionCandidate({name:'voiceai',description:'Set of notes and links to help people build Voice AI agents'}),true);
   assert.equal(search.isCollectionCandidate({name:'voice-pro',description:'Gradio WebUI for transcription, translation and voice cloning'}),false);

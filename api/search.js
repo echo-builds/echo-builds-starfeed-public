@@ -99,6 +99,13 @@ function complementaryQueries(plan) {
   return planQuerySpecs(plan).map(spec=>spec.query);
 }
 
+function activeQuerySpecs(plan,authenticated) {
+  const specs = Array.isArray(plan?.query_specs) ? plan.query_specs : planQuerySpecs(plan);
+  if (authenticated) return specs;
+  const productSpecs = specs.filter(spec=>spec.kind === 'workflow' || spec.kind === 'localized');
+  return (productSpecs.length ? productSpecs : specs).slice(0,3);
+}
+
 function deriveCapabilitySignature(query,checks) {
   const actionTokens = normalizeGithubQuery(query).split(/\s+/).filter(token=>/^[a-z0-9+#.-]+$/i.test(token));
   const action = actionTokens.at(-1);
@@ -698,9 +705,10 @@ module.exports = async function handler(req,res) {
 
     const plan = await planSearch(req,input);
     if (plan.mode !== 'ai') return res.status(503).json({error:'ai_planning_unavailable',detail:plan.aiFallbackReason || 'planning_failed'});
-    const batches = await Promise.allSettled(plan.queries.map((query,index)=>githubSearch(query,token,plan.query_specs?.[index]?.kind)));
+    const searchSpecs = activeQuerySpecs(plan,Boolean(token));
+    const batches = await Promise.allSettled(searchSpecs.map(spec=>githubSearch(spec.query,token,spec.kind)));
     const searchResults = batches.map(batch=>batch.status === 'fulfilled' ? batch.value : []);
-    const priorityQueryCount = (plan.query_specs || []).filter(spec=>spec.kind === 'workflow' || spec.kind === 'localized').length;
+    const priorityQueryCount = searchSpecs.filter(spec=>spec.kind === 'workflow' || spec.kind === 'localized').length;
     const candidates = collectDiversifiedCandidates(searchResults,MAX_CANDIDATES,priorityQueryCount);
     if (!candidates.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     const hydrated = await withReadmes(candidates,plan.capability_checks);
@@ -712,11 +720,11 @@ module.exports = async function handler(req,res) {
       (wantsInstructional(plan,input) || !isInstructionalCandidate(item))
     ).length;
     const items = await rankAndDescribe(req,input,plan,rankedCandidates);
-    return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:plan.queries,diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,semantic_rerank:semantic.enabled,returned:items.length},items});
+    return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:searchSpecs.map(spec=>spec.query),diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,semantic_rerank:semantic.enabled,returned:items.length},items});
   } catch (error) {
     return res.status(502).json({error:'search_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
 };
 
-module.exports._test = {activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,cosineSimilarity,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,githubSearchScope,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional,withSemanticScores};
+module.exports._test = {activeQuerySpecs,activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,cosineSimilarity,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,githubSearchScope,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional,withSemanticScores};
 
