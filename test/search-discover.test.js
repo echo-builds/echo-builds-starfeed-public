@@ -150,6 +150,22 @@ test('完整产品与本地语言检索各有复核席位，不被高分组件�
   ]);
 });
 
+test('语义相似度优先选择真正符合整句需求的产品',async()=>{
+  assert.equal(search.cosineSimilarity([1,0],[1,0]),1);
+  assert.equal(search.cosineSimilarity([1,0],[0,1]),0);
+  const freeAI=require('../api/_lib/free-ai');
+  const original=freeAI.embedTexts;
+  try {
+    freeAI.embedTexts=async()=>[[1,0],[0.95,0.05],[0.1,0.9]];
+    const result=await search.withSemanticScores('中文播客配音',[
+      {full_name:'demo/product',description:'complete product',topics:[],readme_excerpt:''},
+      {full_name:'demo/component',description:'generic component',topics:[],readme_excerpt:''}
+    ]);
+    assert.equal(result.enabled,true);
+    assert.ok(result.items[0]._semantic_score > result.items[1]._semantic_score);
+  } finally { freeAI.embedTexts=original; }
+});
+
 test('GitHub 召回去掉会把查询锁死的描述词，保留核心产品类别',()=>{
   assert.equal(search.normalizeGithubQuery('end-to-end podcast dubbing'),'podcast dubbing');
   assert.equal(search.normalizeGithubQuery('natural expressive TTS Chinese'),'TTS Chinese');
@@ -538,6 +554,40 @@ test('Cloudflare Qwen 请求使用正确端点并解析自然语言搜索的 JSO
     assert.deepEqual(JSON.parse(requested.options.body).response_format,{type:'json_object'});
     assert.deepEqual(JSON.parse(requested.options.body).chat_template_kwargs,{enable_thinking:false});
     assert.deepEqual(result.queries,['workflow automation','agent tools']);
+  } finally {
+    global.fetch=originalFetch;
+    for (const [key,value] of Object.entries({
+      FREE_AI_PROVIDER:original.provider,
+      CLOUDFLARE_ACCOUNT_ID:original.account,
+      CLOUDFLARE_API_TOKEN:original.token
+    })) {
+      if (value===undefined) delete process.env[key];
+      else process.env[key]=value;
+    }
+  }
+});
+
+test('Cloudflare 多语言向量模型批量计算候选语义',async()=>{
+  const freeAI = require('../api/_lib/free-ai');
+  const original = {
+    provider:process.env.FREE_AI_PROVIDER,
+    account:process.env.CLOUDFLARE_ACCOUNT_ID,
+    token:process.env.CLOUDFLARE_API_TOKEN
+  };
+  const originalFetch=global.fetch;
+  let requested;
+  try {
+    process.env.FREE_AI_PROVIDER='cloudflare-qwen';
+    process.env.CLOUDFLARE_ACCOUNT_ID='0123456789abcdef0123456789abcdef';
+    process.env.CLOUDFLARE_API_TOKEN='test-secret-not-real';
+    global.fetch=async (url,options)=>{
+      requested={url,options};
+      return {ok:true,json:async()=>({result:{data:[[1,0],[0.8,0.2]]}})};
+    };
+    const vectors=await freeAI.embedTexts(['中文需求','English repository']);
+    assert.match(requested.url,/\/ai\/run\/@cf\/baai\/bge-m3$/);
+    assert.deepEqual(JSON.parse(requested.options.body),{text:['中文需求','English repository']});
+    assert.deepEqual(vectors,[[1,0],[0.8,0.2]]);
   } finally {
     global.fetch=originalFetch;
     for (const [key,value] of Object.entries({

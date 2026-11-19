@@ -8,6 +8,7 @@ const CLOUDFLARE_FREE_MODELS = new Set([
   '@cf/qwen/qwen3.8-27b'
 ]);
 const CLOUDFLARE_FREE_MODEL = process.env.CLOUDFLARE_FREE_MODEL || '@cf/google/gemma-4-26b-a4b-it';
+const CLOUDFLARE_EMBEDDING_MODEL = '@cf/baai/bge-m3';
 let active = 0;
 let cooldownUntil = 0;
 
@@ -126,5 +127,35 @@ function parseJSON(raw) {
 async function generateJSON(messages,options={}) {
   return parseJSON(await generate(messages,options));
 }
-module.exports={provider,enabled,generate,generateJSON};
+
+async function embedTexts(values) {
+  if (provider() !== 'cloudflare-free') throw new Error('free_embeddings_disabled');
+  const text = (Array.isArray(values) ? values : [values])
+    .map(value=>String(value || '').trim()).filter(Boolean).slice(0,64);
+  if (!text.length) return [];
+  const url = 'https://api.cloudflare.com/client/v4/accounts/' +
+    process.env.CLOUDFLARE_ACCOUNT_ID + '/ai/run/' + CLOUDFLARE_EMBEDDING_MODEL;
+  const response = await fetch(url,{
+    method:'POST',
+    headers:{
+      Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN,
+      'Content-Type':'application/json'
+    },
+    body:JSON.stringify({text}),
+    signal:AbortSignal.timeout(18000)
+  });
+  if (!response.ok) {
+    const error = new Error('free_embeddings_http_'+response.status);
+    error.status = response.status;
+    throw error;
+  }
+  const payload = await response.json();
+  const vectors = payload?.result?.data ?? payload?.data;
+  if (!Array.isArray(vectors) || vectors.length !== text.length || vectors.some(vector=>!Array.isArray(vector))) {
+    throw new Error('free_embeddings_invalid');
+  }
+  return vectors;
+}
+
+module.exports={provider,enabled,embedTexts,generate,generateJSON};
 

@@ -409,6 +409,39 @@ function popularityScore(item) {
   return Math.max(0,Math.min(100,Math.log10(Math.max(1,Number(item.stargazers_count || 0))) * 22));
 }
 
+function cosineSimilarity(left,right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length || !left.length) return 0;
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+  for (let index = 0; index < left.length; index++) {
+    const a = Number(left[index]) || 0;
+    const b = Number(right[index]) || 0;
+    dot += a * b;
+    leftNorm += a * a;
+    rightNorm += b * b;
+  }
+  return leftNorm && rightNorm ? dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm)) : 0;
+}
+
+async function withSemanticScores(input,items) {
+  if (!items.length || typeof freeAI.embedTexts !== 'function') return {items,enabled:false};
+  const documents = items.map(item=>clean([
+    item.full_name,item.description,(item.topics || []).join(' '),item.readme_excerpt
+  ].filter(Boolean).join(' '),1400));
+  try {
+    const vectors = await freeAI.embedTexts([input,...documents]);
+    if (vectors.length !== items.length + 1) return {items,enabled:false};
+    const queryVector = vectors[0];
+    return {
+      enabled:true,
+      items:items.map((item,index)=>({...item,_semantic_score:cosineSimilarity(queryVector,vectors[index + 1])}))
+    };
+  } catch {
+    return {items,enabled:false};
+  }
+}
+
 function metadataQuality(item) {
   let score = 20;
   if (item.description) score += 18;
@@ -507,7 +540,7 @@ function buildRankingPool(scored,priorityQueryCount,size = RANKING_POOL_SIZE) {
   };
   for (let queryIndex = 0; queryIndex < priorityQueryCount; queryIndex++) {
     scored.filter(entry=>Number(entry.item._search_query_index) === queryIndex)
-      .sort((a,b)=>Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || b.matched-a.matched)
+      .sort((a,b)=>Number(b.item._semantic_score || 0)-Number(a.item._semantic_score || 0) || Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || b.matched-a.matched)
       .slice(0,2).forEach(add);
   }
   scored.filter(entry=>entry.matched > 0).forEach(add);
@@ -566,10 +599,10 @@ async function rankAndDescribe(req,input,plan,items) {
     item,
     matched:required.length ? capabilityMatchCount(item,required) : 1,
     direct:required.length ? capabilityMatchCount(item,required,true) : 1
-  })).sort((a,b)=>b.direct-a.direct || b.matched-a.matched || Number(a.item._search_query_index ?? 99)-Number(b.item._search_query_index ?? 99) || Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || Number(b.item.stargazers_count || 0)-Number(a.item.stargazers_count || 0));
+  })).sort((a,b)=>Number(b.item._semantic_score || 0)-Number(a.item._semantic_score || 0) || b.direct-a.direct || b.matched-a.matched || Number(a.item._search_query_index ?? 99)-Number(b.item._search_query_index ?? 99) || Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || Number(b.item.stargazers_count || 0)-Number(a.item.stargazers_count || 0));
   const priorityQueryCount = Math.max(1,(plan.query_specs || []).filter(spec=>spec.kind === 'workflow' || spec.kind === 'localized').length);
   const pool = buildRankingPool(scored,priorityQueryCount);
-  try {
+  if (!pool.some(entry=>Number(entry.item._semantic_score || 0) > 0)) try {
     const result = await askModel(req,[
       {role:'system',content:'你是严格的 GitHub 项目研究员，只输出 JSON：{"items":[{"full_name":"owner/repo","fit_score":0,"title":"中文标题","summary":"适合原因","capability_evidence":[{"capability":"必须能力原名","evidence_quote":"候选资料逐字原文"}],"strengths":["已证明优势"],"limitations":["缺口或未验证项"]}]}。只返回最多6个值得推荐的项目，省略不相关候选，不要输出 keep=false。逐项核对输入、输出、必须能力和限制；完整方案优先，部分组件可保留但必须写清缺口。逐字证据不得改写。关键词偶然出现、相邻能力、教程或资源列表不推荐。主观体验没有试听或实测时必须写“尚未试听/实测，不能保证”。'},
       {role:'user',content:JSON.stringify({request:input,goal:plan.goal,required_capabilities:required.map(check=>check.name),constraints:plan.constraints,candidates:pool.map(({item})=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,readme_excerpt:clean(item.readme_excerpt,700)}))})}
@@ -591,10 +624,10 @@ async function rankAndDescribe(req,input,plan,items) {
       const coverage = required.length ? supported.length / required.length : 1;
       const primarySatisfied = !primaryChecks.length || primaryChecks.some(check=>supported.includes(check));
       if (!primarySatisfied || coverage < minimumCapabilityCoverage(required.length)) continue;
-      const {readme_excerpt,_search_query_index,_search_rank,...repo} = item;
+      const {readme_excerpt,_search_query_index,_search_rank,_semantic_score,...repo} = item;
       const summary = clean(decision.summary,170) || clean(item.description,150);
       const gap = limitations[0] ? `不足：${limitations[0]}` : '';
-      evaluated.push({...repo,fit_score:fit,capability_coverage:coverage,relevance_score:Math.round((fit * .7 + coverage * 30) * 10) / 10,rank_score:fit * .68 + coverage * 24 + popularityScore(item) * .08,assessment_mode:'ai_evaluated',ai_title:clean(decision.title,60) || item.name,ai_summary:clean([summary,gap].filter(Boolean).join('；'),220),ai_bullets:strengths,ai_limitations:limitations,ai_evidence:validClaims.map(claim=>clean(claim.evidence_quote,220)).slice(0,4),matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched});
+      evaluated.push({...repo,fit_score:fit,capability_coverage:coverage,semantic_score:Number(_semantic_score || 0),relevance_score:Math.round((fit * .55 + coverage * 25 + Number(_semantic_score || 0) * 20) * 10) / 10,rank_score:fit * .5 + coverage * 22 + Number(_semantic_score || 0) * 20 + popularityScore(item) * .08,assessment_mode:'ai_evaluated',ai_title:clean(decision.title,60) || item.name,ai_summary:clean([summary,gap].filter(Boolean).join('；'),220),ai_bullets:strengths,ai_limitations:limitations,ai_evidence:validClaims.map(claim=>clean(claim.evidence_quote,220)).slice(0,4),matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched});
     }
     if (evaluated.length) return evaluated.sort((a,b)=>b.capability_coverage-a.capability_coverage || b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,8);
   } catch {}
@@ -604,15 +637,15 @@ async function rankAndDescribe(req,input,plan,items) {
     const coverage = required.length ? supported.length / required.length : 1;
     const primarySatisfied = !primaryChecks.length || primaryChecks.some(check=>supported.includes(check));
     if (!primarySatisfied || coverage < minimumCapabilityCoverage(required.length)) return null;
-    const {readme_excerpt,_search_query_index,_search_rank,...repo} = item;
+    const {readme_excerpt,_search_query_index,_search_rank,_semantic_score,...repo} = item;
     const queryPriority = Math.max(0,100 - Number(item._search_query_index ?? 6) * 15 - Number(item._search_rank ?? 20) * 2);
     const evidenceLimits = [
       ...(missing.length ? [`尚未核验：${missing.join('、')}`] : []),
       '当前仅依据仓库资料核对相关能力，尚未验证这些能力已组成可直接使用的完整工作流',
       '自然度、音质和实际使用体验尚未试听或实测，不能保证'
     ];
-    return {...repo,fit_score:Math.round(coverage * 100),capability_coverage:coverage,relevance_score:Math.round(coverage * 1000) / 10,rank_score:coverage * 80 + queryPriority * .2,assessment_mode:'evidence_fallback',ai_title:item.name,ai_summary:clean([`仓库资料命中：${supported.map(check=>check.name).join('、') || '与需求相关的能力'}`,missing.length ? `未核验：${missing.join('、')}` : '',item.description || ''].filter(Boolean).join('；'),220),ai_bullets:supported.map(check=>`README 或仓库简介包含与“${check.name}”相关的证据`).slice(0,3),ai_limitations:evidenceLimits,ai_evidence:item.description ? [clean(item.description,220)] : [],matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched};
-  }).filter(Boolean).sort((a,b)=>b.capability_coverage-a.capability_coverage || b.rank_score-a.rank_score).slice(0,6);
+    return {...repo,fit_score:Math.round(coverage * 100),capability_coverage:coverage,semantic_score:Number(_semantic_score || 0),relevance_score:Math.round((coverage * 80 + Number(_semantic_score || 0) * 20) * 10) / 10,rank_score:coverage * 70 + Number(_semantic_score || 0) * 24 + queryPriority * .06,assessment_mode:'evidence_fallback',ai_title:item.name,ai_summary:clean([`仓库资料命中：${supported.map(check=>check.name).join('、') || '与需求相关的能力'}`,missing.length ? `未核验：${missing.join('、')}` : '',item.description || ''].filter(Boolean).join('；'),220),ai_bullets:supported.map(check=>`README 或仓库简介包含与“${check.name}”相关的证据`).slice(0,3),ai_limitations:evidenceLimits,ai_evidence:item.description ? [clean(item.description,220)] : [],matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched};
+  }).filter(Boolean).sort((a,b)=>b.capability_coverage-a.capability_coverage || b.semantic_score-a.semantic_score || b.rank_score-a.rank_score).slice(0,6);
   if (partial.length) return partial;
   const direct = eligible.filter(item=>primaryCapabilityEvidenceSupported(item,required));
   return fallbackRank(plan,direct.length ? direct : eligible,{allowReadmeEvidence:!direct.length});
@@ -664,17 +697,19 @@ module.exports = async function handler(req,res) {
     const candidates = collectDiversifiedCandidates(searchResults,MAX_CANDIDATES,priorityQueryCount);
     if (!candidates.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     const hydrated = await withReadmes(candidates,plan.capability_checks);
-    const eligibleCount = hydrated.filter(item=>
+    const semantic = await withSemanticScores(input,hydrated);
+    const rankedCandidates = semantic.items;
+    const eligibleCount = rankedCandidates.filter(item=>
       (!plan.capability_checks.length || capabilityMatchCount(item,plan.capability_checks) > 0) &&
       (wantsCollection(plan,input) || !isCollectionCandidate(item)) &&
       (wantsInstructional(plan,input) || !isInstructionalCandidate(item))
     ).length;
-    const items = await rankAndDescribe(req,input,plan,hydrated);
-    return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:plan.queries,diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,returned:items.length},items});
+    const items = await rankAndDescribe(req,input,plan,rankedCandidates);
+    return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:plan.queries,diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,semantic_rerank:semantic.enabled,returned:items.length},items});
   } catch (error) {
     return res.status(502).json({error:'search_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
 };
 
-module.exports._test = {activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional};
+module.exports._test = {activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,cosineSimilarity,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional,withSemanticScores};
 
