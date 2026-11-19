@@ -484,6 +484,22 @@ function isInstructionalCandidate(item) {
   return /(?:^|[-_])(course|tutorial|workshop|learning|learn|examples?|starter[-_]?kit)(?:$|[-_])/i.test(item.name || '') || /\b(?:course|tutorial|workshop|learning resource|educational content|step-by-step guide)\b/i.test(item.description || '');
 }
 
+function buildRankingPool(scored,priorityQueryCount,size = RANKING_POOL_SIZE) {
+  const selected = new Map();
+  const add = entry=>{
+    const key = String(entry?.item?.full_name || '').toLowerCase();
+    if (key && !selected.has(key) && selected.size < size) selected.set(key,entry);
+  };
+  for (let queryIndex = 0; queryIndex < priorityQueryCount; queryIndex++) {
+    scored.filter(entry=>Number(entry.item._search_query_index) === queryIndex)
+      .sort((a,b)=>Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || b.matched-a.matched)
+      .slice(0,2).forEach(add);
+  }
+  scored.filter(entry=>entry.matched > 0).forEach(add);
+  scored.filter(entry=>entry.matched === 0).forEach(add);
+  return [...selected.values()];
+}
+
 function fallbackRank(plan,items,options = {}) {
   const needTokens = tokenSet([plan.goal,plan.intent,...plan.core_capabilities,...plan.constraints,...plan.queries].join(' '));
   const queryTokenSets = plan.queries.map(tokenSet).filter(tokens=>tokens.size);
@@ -536,8 +552,8 @@ async function rankAndDescribe(req,input,plan,items) {
     matched:required.length ? capabilityMatchCount(item,required) : 1,
     direct:required.length ? capabilityMatchCount(item,required,true) : 1
   })).sort((a,b)=>b.direct-a.direct || b.matched-a.matched || Number(a.item._search_query_index ?? 99)-Number(b.item._search_query_index ?? 99) || Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || Number(b.item.stargazers_count || 0)-Number(a.item.stargazers_count || 0));
-  const evidenced = scored.filter(entry=>entry.matched > 0);
-  const pool = (evidenced.length >= RANKING_POOL_SIZE ? evidenced : [...evidenced,...scored.filter(entry=>entry.matched === 0)]).slice(0,RANKING_POOL_SIZE);
+  const priorityQueryCount = Math.max(1,(plan.query_specs || []).filter(spec=>spec.kind === 'workflow' || spec.kind === 'localized').length);
+  const pool = buildRankingPool(scored,priorityQueryCount);
   try {
     const result = await askModel(req,[
       {role:'system',content:'你是严格的 GitHub 项目研究员，只输出 JSON：{"items":[{"full_name":"owner/repo","fit_score":0,"title":"中文标题","summary":"适合原因","capability_evidence":[{"capability":"必须能力原名","evidence_quote":"候选资料逐字原文"}],"strengths":["已证明优势"],"limitations":["缺口或未验证项"]}]}。只返回最多6个值得推荐的项目，省略不相关候选，不要输出 keep=false。逐项核对输入、输出、必须能力和限制；完整方案优先，部分组件可保留但必须写清缺口。逐字证据不得改写。关键词偶然出现、相邻能力、教程或资源列表不推荐。主观体验没有试听或实测时必须写“尚未试听/实测，不能保证”。'},
@@ -644,5 +660,5 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional};
+module.exports._test = {activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional};
 

@@ -120,6 +120,24 @@ test('候选采样保留每条检索的长尾产品，不按 Star 全局挤掉',
   assert.ok(candidates.some(item=>item.full_name === 'demo/q4-r49'));
 });
 
+test('完整产品与本地语言检索各有复核席位，不被高分组件挤掉',()=>{
+  const entry=(name,query,rank,matched,direct)=>({
+    item:{full_name:name,_search_query_index:query,_search_rank:rank,stargazers_count:1},matched,direct
+  });
+  const scored=[
+    entry('demo/popular-a',3,0,4,4),entry('demo/popular-b',4,0,4,4),
+    entry('demo/workflow-a',0,0,2,1),entry('demo/workflow-b',0,1,2,1),
+    entry('demo/signature-a',1,0,2,1),entry('demo/signature-b',1,1,2,1),
+    entry('demo/localized-a',2,0,1,1),entry('demo/localized-b',2,1,1,1),
+    entry('demo/extra',3,1,3,3)
+  ];
+  const pool=search.buildRankingPool(scored,3,8).map(entry=>entry.item.full_name);
+  assert.deepEqual(pool,[
+    'demo/workflow-a','demo/workflow-b','demo/signature-a','demo/signature-b',
+    'demo/localized-a','demo/localized-b','demo/popular-a','demo/popular-b'
+  ]);
+});
+
 test('GitHub 召回去掉会把查询锁死的描述词，保留核心产品类别',()=>{
   assert.equal(search.normalizeGithubQuery('end-to-end podcast dubbing'),'podcast dubbing');
   assert.equal(search.normalizeGithubQuery('natural expressive TTS Chinese'),'TTS Chinese');
