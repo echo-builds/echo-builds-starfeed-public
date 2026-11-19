@@ -119,7 +119,9 @@ function attentionSignal(repo,readme = '') {
     /artificial intelligence|\bai\b|llm|multimodal|foundation model|generative/,
     /agent|mcp|skill|tool calling|workflow|automation|orchestrat/,
     /inference|embedding|vector|rag|model serving|gpu|runtime|evaluation|observability|guardrail/,
-    /copilot|assistant|productivity|research|meeting|note|transcri|voice|audio|video|design|prototype|search|knowledge/
+    /copilot|assistant|productivity|research|meeting|note|transcri|voice|audio|video|design|prototype|search|knowledge/,
+    /product analytics|session replay|feature flag|a\/b test|experiment|user feedback|telemetry|monitoring/,
+    /local[- ]first|collaboration|whiteboard|diagram|data visualization|low[- ]code|no[- ]code|design system/
   ];
   return groups.reduce((score,pattern)=>score + Number(pattern.test(text)),0);
 }
@@ -129,9 +131,20 @@ function directAttentionSignal(repo,readme = '') {
   const groups = [
     /artificial intelligence|\bai\b|llm|multimodal|foundation model|generative/,
     /\bagent(?:ic|s)?\b|\bmcp\b|claude|codex|tool calling|agent skill/,
-    /model inference|llm inference|on-device llm|embedding model|\brag\b|model serving|llm evaluation|ai observability|llm observability|guardrail/
+    /model inference|llm inference|on-device llm|embedding model|\brag\b|model serving|llm evaluation|ai observability|llm observability|guardrail/,
+    /product analytics|session replay|feature flag|user feedback|product experiment|a\/b testing|event analytics/,
+    /prototyping|design system|workflow automation|low[- ]code|no[- ]code|local[- ]first|collaborative whiteboard|data visualization/
   ];
   return groups.reduce((score,pattern)=>score + Number(pattern.test(text)),0);
+}
+
+function attentionCategory(repo,readme = '') {
+  const text = `${repo.name} ${repo.description || ''} ${(repo.topics || []).join(' ')} ${String(readme).slice(0,2500)}`.toLowerCase();
+  if (/artificial intelligence|\bai\b|llm|multimodal|agent|\bmcp\b|inference|embedding|\brag\b/.test(text)) return 'ai_capability';
+  if (/product analytics|session replay|feature flag|user feedback|experiment|telemetry|observability/.test(text)) return 'product_operations';
+  if (/prototype|design system|workflow automation|low[- ]code|no[- ]code|whiteboard|diagram/.test(text)) return 'product_building';
+  if (/local[- ]first|productivity|collaboration|data visualization|meeting|note|research/.test(text)) return 'product_inspiration';
+  return 'ai_product';
 }
 
 function isResourceCollection(repo) {
@@ -164,9 +177,10 @@ function fallbackSummary(repo) {
 function fallbackCopy(repo,kind,release,readme,cover) {
   const signal = attentionSignal(repo,readme);
   const directSignal = directAttentionSignal(repo,readme);
+  const relevant = directSignal > 0 && !isResourceCollection(repo);
   return {
-    relevant:directSignal > 0 && !isResourceCollection(repo),
-    attention_category:directSignal > 0 && !isResourceCollection(repo) ? 'ai_related' : 'irrelevant',
+    relevant,
+    attention_category:relevant ? attentionCategory(repo,readme) : 'irrelevant',
     attention_score:Math.min(80,42 + signal * 10),
     quality_score:metadataQuality(repo,readme,cover),
     title:repo.name,
@@ -213,7 +227,7 @@ async function classify(req,candidates) {
     const batches = [];
     for (let i=0;i<payload.length;i+=9) batches.push(payload.slice(i,i+9));
     const attempts = await Promise.allSettled(batches.map(async chunk=>askModel(req,[
-      {role:'system',content:'你为 AI 产品经理的 GitHub 推荐流做准入、价值判断和中文介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"attention_category":"ai_product_interaction|agent_workflow|model_capability|ai_productivity|enabling_infrastructure|irrelevant","attention_score":0,"quality_score":0,"title":"中文标题","summary":"中文一句话","selection_reason":"入选原因","evidence_quotes":["资料中的逐字原文"]}]}。必须为每个候选返回一项并保持 full_name。关注价值包括：新的 AI 产品或交互方式；Agent、Skill 与 AI 工作流；值得了解的模型能力或技术创新；实用的 AI 效率工具；对 AI 产品落地有重要意义的基础设施。不要机械排除技术项目：如果它带来新的模型能力、运行方式、评测、安全、数据、部署或开发方法，并会影响产品能力与落地决策，可以进入推荐。反过来，只有热度但与 AI 产品无直接关系、没有新能力或工作方法的项目应排除。每个 relevant 项目必须提供 1-3 条 evidence_quotes，逐字复制 Description、Topics、Release 或 README 原文并直接支撑 title、summary 和关注价值；证据不足就标记 relevant=false。attention_score 表示对 AI 产品经理的了解价值；quality_score 综合 README 完整度、维护状态、可体验性、社区参与和产品完成度。title 直接说明解决的问题或提供的能力。summary 必须先写资料可核验的事实：解决什么实际问题、提供什么方案、有什么新意；不要堆砌术语，不写空泛的“值得关注”。不得编造功能。技术项目的产品价值如果属于推测，必须使用“可用于”“可能帮助”等措辞。selection_reason 只能写“近期高星新项目”或“近期发布 <版本>”。'},
+      {role:'system',content:'你为“AI 产品经理值得了解的 GitHub 项目”做准入、价值判断和中文介绍。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"attention_category":"ai_capability|ai_product|product_building|product_operations|product_inspiration|irrelevant","attention_score":0,"quality_score":0,"title":"中文标题","summary":"中文一句话","selection_reason":"入选原因","evidence_quotes":["资料中的逐字原文"]}]}。项目不必使用 AI，但必须至少影响一个产品判断：AI 能力边界、用户体验与交互、产品实现路径、数据与运营、成本安全风险。可收录新的 AI 产品与交互方式，Agent、Skill 和 AI 工作流，模型能力与重要基础设施，也可收录原型设计、工作流自动化、产品分析、实验与反馈、协作和本地优先等对 AI 产品工作有明确启发的项目。排除教程、资源合集、批量克隆、只有热度或技术名词但没有明确用途的项目。每个 relevant 项目必须提供 1-3 条 evidence_quotes，逐字复制 Description、Topics、Release 或 README 原文并直接支撑 title、summary 和关注价值；证据不足就标记 relevant=false。attention_score 表示对 AI 产品经理的了解价值；quality_score 综合 README 完整度、维护状态、可体验性、社区参与和产品完成度。title 直接说明解决的问题或提供的能力。summary 必须先写资料可核验的事实：解决什么实际问题、提供什么方案、有什么新意；不要堆砌术语，不写空泛的“值得关注”。不得编造功能。技术项目的产品价值如果属于推测，必须使用“可用于”“可能帮助”等措辞。selection_reason 只能写“近期高星新项目”或“近期发布 <版本>”。'},
       {role:'user',content:JSON.stringify({candidates:chunk})}
     ],2500)));
     const successful = attempts.filter(a=>a.status === 'fulfilled').map(a=>a.value);
@@ -421,3 +435,4 @@ module.exports = async function handler(req,res) {
 };
 
 module.exports._test = {attentionSignal,verifiedCachedCopy,normalizeEvidenceText,conservativeDecisionSupported,directAttentionSignal,fallbackCopy,fallbackSummary,isResourceCollection,metadataQuality,momentumScore,popularityScore,readmeImages,recommendationEvidenceSupported,uniqueText};
+

@@ -1,6 +1,6 @@
 # RepoScroll · GitHub 推荐流
 
-**像刷小红书一样逛 GitHub，发现有趣的 AI 开源项目。**
+**像刷小红书一样逛 GitHub，发现 AI 产品经理值得了解的开源产品、工具和技术变化。**
 
 **正式产品入口（网页与手机）：[立即体验 RepoScroll](https://echo-builds-starfeed.vercel.app/)**
 
@@ -8,7 +8,7 @@
 
 ## 为什么做这个？
 
-我是一名 AI 产品经理，平时喜欢在 GitHub 上看看最近有什么新的 AI 产品、技术和有意思的开源项目。
+我是一名 AI 产品经理，平时喜欢在 GitHub 上看看最近有哪些会影响产品判断的新产品、工具和技术。项目不一定使用 AI，但需要对 AI 产品工作有明确价值。
 
 但 GitHub 对我来说，一直不太好逛。
 
@@ -30,7 +30,7 @@
 
 ### 01 · 像刷小红书一样发现项目
 
-打开就是双列信息流，推荐近期值得关注的高星 AI 项目。
+打开就是双列信息流，推荐近期值得 AI 产品经理关注的高质量项目。
 
 既包括新出现、快速受到关注的项目，也包括最近有重要进展的成熟项目。
 
@@ -78,7 +78,7 @@ python3 -m http.server 4173
 
 随后打开 http://localhost:4173 。GitHub 登录、Stars 同步、推荐与搜索接口依赖 Vercel Functions，静态预览不能完整运行这些能力。
 
-Vercel 部署需要配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` 和 `SESSION_SECRET`。
+Vercel 部署需要配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`SESSION_SECRET` 和 `DATABASE_URL`。首次启用持久推荐流时运行 `npm run db:migrate`，再运行 `npm run feed:backfill` 预处理首批 200 个候选项目。\n\n推荐库每 6 小时由公开仓库的 `scan-feed.yml` 扫描一次。配置 GitHub Actions Secret `DATABASE_URL` 和 `FEED_GITHUB_TOKEN`，并将 Actions Variable `FEED_SCANNER_ENABLED` 设为 `true` 后才会开始写入；未配置时线上会继续使用原有推荐接口，不会中断浏览。
 
 ### 免费运行与可选 AI 配置
 

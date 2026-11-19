@@ -2,6 +2,15 @@
   "name": "echo-builds-starfeed",
   "version": "1.0.0",
   "private": true,
-  "scripts": {"test":"node --test"},
+  "scripts": {
+    "test":"node --test",
+    "db:migrate":"node scripts/migrate-feed.cjs",
+    "feed:scan":"node scripts/scan-feed.cjs",
+    "feed:backfill":"node scripts/scan-feed.cjs --backfill=200"
+  },
+  "dependencies": {
+    "@neondatabase/serverless":"^1.0.2"
+  },
   "engines": {"node": ">=20"}
 }
+

@@ -428,6 +428,17 @@ test('推荐降级不会仅因 audio、video、design 等宽泛词收入普通�
   assert.equal(discover.fallbackCopy({name:'awesome-agent-tools',description:'A curated list of AI agent tools',topics:['ai'],stargazers_count:5000,forks_count:20,license:{spdx_id:'MIT'}},'new',null,'',null).relevant,false);
 });
 
+test('推荐降级允许收录对 AI 产品经理有明确价值的非 AI 项目',()=>{
+  const analytics = {name:'product-insights',description:'Open source product analytics with session replay and feature flags',topics:['product-analytics'],stargazers_count:8000,forks_count:300,license:{spdx_id:'MIT'}};
+  const prototype = {name:'prototype-kit',description:'Collaborative prototyping and design system for product teams',topics:['prototyping'],stargazers_count:5000,forks_count:120,license:{spdx_id:'MIT'}};
+  const analyticsCopy = discover.fallbackCopy(analytics,'new',null,'x'.repeat(1200),null);
+  const prototypeCopy = discover.fallbackCopy(prototype,'new',null,'x'.repeat(1200),null);
+  assert.equal(analyticsCopy.relevant,true);
+  assert.equal(analyticsCopy.attention_category,'product_operations');
+  assert.equal(prototypeCopy.relevant,true);
+  assert.equal(prototypeCopy.attention_category,'product_building');
+});
+
 test('AI 相关性判断缺少合格逐字证据时只保留主元数据明确相关的项目',()=>{
   const decision = {relevant:true,attention_score:80,quality_score:75};
   assert.equal(discover.conservativeDecisionSupported({name:'filee',description:'Offline file converter for PDF, video and audio',topics:[]},decision),false);
