@@ -65,10 +65,135 @@ test('检索计划只使用模型生成的英文查询，不把中文或拼接�
   assert.deepEqual(queries,['LLM agent reliability benchmark']);
 });
 
+test('完整产品、用户语言和组件检索分层执行，完整产品始终优先',()=>{
+  const plan = search.normalizeAIPlan({
+    intent:'把英文访谈转成自然中文多人音频',
+    goal:'输出可收听的中文多人对话',
+    core_capabilities:[{name:'音频转写',evidence_terms:['audio transcription','音频转写']}],
+    constraints:['自然度待试听'],
+    workflow_queries:['interview dubbing','speech dubbing transcription'],
+    localized_queries:['访谈 翻译 配音'],
+    component_queries:['speaker diarization','multi speaker TTS','voice cloning']
+  },'英文访谈转中文多人音频');
+  assert.deepEqual(plan.queries,[
+    'interview dubbing','audio transcription dubbing','访谈 翻译 配音',
+    'speaker diarization','multi speaker TTS'
+  ]);
+  assert.deepEqual(plan.query_specs.map(spec=>spec.kind),['workflow','workflow','localized','component','component']);
+});
+
+test('第二条产品检索由输入能力和整体动作组成，不依赖模型逐字猜中',()=>{
+  assert.equal(search.deriveCapabilitySignature('podcast dubbing',[
+    {name:'音频转写',evidence_terms:['speech transcription','语音转文字']},
+    {name:'说话人识别',evidence_terms:['speaker diarization']}
+  ]),'speech transcription dubbing');
+});
+
+test('返回给前端的检索词与 GitHub 实际执行词一致',()=>{
+  const plan=search.normalizeAIPlan({
+    intent:'播客翻译',goal:'播客配音',
+    core_capabilities:[{name:'转写',evidence_terms:['speech transcription','语音转写']}],
+    workflow_queries:['audio dubbing','speech translation'],
+    localized_queries:['播客 自动配音'],component_queries:['speaker diarization']
+  },'播客翻译');
+  assert.ok(plan.queries.includes('播客 配音'));
+  assert.ok(!plan.queries.some(query=>query.includes('自动')));
+});
+
+test('中文仓库说明可以作为能力证据，不要求作者必须写英文术语',()=>{
+  const source='开箱即用的访谈翻译工具，可将英文录音转写、翻译、配音并合成为中文多人音频。';
+  assert.equal(search.capabilityEvidenceSupportedInText(source,[
+    {name:'录音转写',evidence_terms:['audio transcription','录音转写']},
+    {name:'中文配音',evidence_terms:['Chinese dubbing','中文多人音频']}
+  ]),true);
+  assert.equal(search.capabilityEvidenceSupportedInText('支持播客翻译和中文配音',[{
+    name:'翻译',evidence_terms:['machine translation','text translation','翻译']
+  }]),true);
+});
+
+test('候选采样保留每条检索的长尾产品，不按 Star 全局挤掉',()=>{
+  const make=(query,rank,stars=1)=>({
+    full_name:`demo/q${query}-r${rank}`,name:`q${query}-r${rank}`,description:'',topics:[],
+    stargazers_count:stars,forks_count:0,archived:false,fork:false,default_branch:'main'
+  });
+  const results=Array.from({length:5},(_,query)=>Array.from({length:50},(_,rank)=>make(query,rank,rank === 0 ? 100000 : 1)));
+  const candidates=search.collectDiversifiedCandidates(results);
+  assert.equal(candidates.length,42);
+  assert.ok(candidates.some(item=>item.full_name === 'demo/q0-r49'));
+  assert.ok(candidates.some(item=>item.full_name === 'demo/q4-r49'));
+});
+
+test('产品检索连续保留前八名，不会漏掉第四名的长尾产品',()=>{
+  const make=(query,rank)=>({
+    full_name:`demo/q${query}-r${rank}`,name:`q${query}-r${rank}`,description:'',topics:[],
+    stargazers_count:1,forks_count:0,archived:false,fork:false,default_branch:'main'
+  });
+  const results=Array.from({length:5},(_,query)=>Array.from({length:50},(_,rank)=>make(query,rank)));
+  const candidates=search.collectDiversifiedCandidates(results,42,3);
+  for (let query=0;query<3;query++) {
+    for (let rank=0;rank<8;rank++) assert.ok(candidates.some(item=>item.full_name === `demo/q${query}-r${rank}`));
+  }
+});
+
+test('完整产品与本地语言检索各有复核席位，不被高分组件挤掉',()=>{
+  const entry=(name,query,rank,matched,direct)=>({
+    item:{full_name:name,_search_query_index:query,_search_rank:rank,stargazers_count:1},matched,direct
+  });
+  const scored=[
+    entry('demo/popular-a',3,0,4,4),entry('demo/popular-b',4,0,4,4),
+    entry('demo/workflow-a',0,0,2,1),entry('demo/workflow-b',0,1,2,1),
+    entry('demo/signature-a',1,0,2,1),entry('demo/signature-b',1,1,2,1),
+    entry('demo/localized-a',2,0,1,1),entry('demo/localized-b',2,1,1,1),
+    entry('demo/extra',3,1,3,3)
+  ];
+  const pool=search.buildRankingPool(scored,3,8).map(entry=>entry.item.full_name);
+  assert.deepEqual(pool,[
+    'demo/workflow-a','demo/workflow-b','demo/signature-a','demo/signature-b',
+    'demo/localized-a','demo/localized-b','demo/popular-a','demo/popular-b'
+  ]);
+});
+
+test('语义相似度优先选择真正符合整句需求的产品',async()=>{
+  assert.equal(search.cosineSimilarity([1,0],[1,0]),1);
+  assert.equal(search.cosineSimilarity([1,0],[0,1]),0);
+  const freeAI=require('../api/_lib/free-ai');
+  const original=freeAI.embedTexts;
+  try {
+    freeAI.embedTexts=async()=>[[1,0],[0.95,0.05],[0.1,0.9]];
+    const result=await search.withSemanticScores('中文播客配音',[
+      {full_name:'demo/product',description:'complete product',topics:[],readme_excerpt:''},
+      {full_name:'demo/component',description:'generic component',topics:[],readme_excerpt:''}
+    ]);
+    assert.equal(result.enabled,true);
+    assert.ok(result.items[0]._semantic_score > result.items[1]._semantic_score);
+  } finally { freeAI.embedTexts=original; }
+});
+
 test('GitHub 召回去掉会把查询锁死的描述词，保留核心产品类别',()=>{
   assert.equal(search.normalizeGithubQuery('end-to-end podcast dubbing'),'podcast dubbing');
   assert.equal(search.normalizeGithubQuery('natural expressive TTS Chinese'),'TTS Chinese');
+  assert.equal(search.normalizeGithubQuery('automated podcast dubbing system'),'podcast dubbing');
+  assert.equal(search.normalizeGithubQuery('speech translation with voice cloning and natural TTS'),'speech translation voice cloning TTS');
+  assert.equal(search.normalizeGithubQuery('播客 自动配音'),'播客 配音');
   assert.equal(search.normalizeGithubQuery('menu translation'),'menu translation');
+});
+
+test('完整产品查主元数据，组件才查 README 全文',()=>{
+  assert.equal(search.githubSearchScope('workflow'),'in:name,description,topics');
+  assert.equal(search.githubSearchScope('localized'),'in:name,description,topics');
+  assert.equal(search.githubSearchScope('component'),'in:name,description,readme,topics');
+});
+
+test('未登录只查完整产品，登录后才补充组件检索',()=>{
+  const plan={query_specs:[
+    {query:'product action',kind:'workflow'},
+    {query:'capability signature',kind:'workflow'},
+    {query:'本地 产品 动作',kind:'localized'},
+    {query:'input component',kind:'component'},
+    {query:'output component',kind:'component'}
+  ]};
+  assert.deepEqual(search.activeQuerySpecs(plan,false).map(spec=>spec.query),['product action','capability signature','本地 产品 动作']);
+  assert.equal(search.activeQuerySpecs(plan,true).length,5);
 });
 
 test('资源链接合集不会作为可运行产品进入推荐',()=>{
@@ -461,6 +586,40 @@ test('Cloudflare Qwen 请求使用正确端点并解析自然语言搜索的 JSO
     assert.deepEqual(JSON.parse(requested.options.body).response_format,{type:'json_object'});
     assert.deepEqual(JSON.parse(requested.options.body).chat_template_kwargs,{enable_thinking:false});
     assert.deepEqual(result.queries,['workflow automation','agent tools']);
+  } finally {
+    global.fetch=originalFetch;
+    for (const [key,value] of Object.entries({
+      FREE_AI_PROVIDER:original.provider,
+      CLOUDFLARE_ACCOUNT_ID:original.account,
+      CLOUDFLARE_API_TOKEN:original.token
+    })) {
+      if (value===undefined) delete process.env[key];
+      else process.env[key]=value;
+    }
+  }
+});
+
+test('Cloudflare 多语言向量模型批量计算候选语义',async()=>{
+  const freeAI = require('../api/_lib/free-ai');
+  const original = {
+    provider:process.env.FREE_AI_PROVIDER,
+    account:process.env.CLOUDFLARE_ACCOUNT_ID,
+    token:process.env.CLOUDFLARE_API_TOKEN
+  };
+  const originalFetch=global.fetch;
+  let requested;
+  try {
+    process.env.FREE_AI_PROVIDER='cloudflare-qwen';
+    process.env.CLOUDFLARE_ACCOUNT_ID='0123456789abcdef0123456789abcdef';
+    process.env.CLOUDFLARE_API_TOKEN='test-secret-not-real';
+    global.fetch=async (url,options)=>{
+      requested={url,options};
+      return {ok:true,json:async()=>({result:{data:[[1,0],[0.8,0.2]]}})};
+    };
+    const vectors=await freeAI.embedTexts(['中文需求','English repository']);
+    assert.match(requested.url,/\/ai\/run\/@cf\/baai\/bge-m3$/);
+    assert.deepEqual(JSON.parse(requested.options.body),{text:['中文需求','English repository']});
+    assert.deepEqual(vectors,[[1,0],[0.8,0.2]]);
   } finally {
     global.fetch=originalFetch;
     for (const [key,value] of Object.entries({
