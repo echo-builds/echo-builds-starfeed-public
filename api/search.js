@@ -6,7 +6,7 @@ const GITHUB_API = 'https://api.github.com';
 const MAX_CANDIDATES = 42;
 const DIVERSIFIED_RANKS = [0,1,2,5,12,24,49];
 const MAX_QUERY_COUNT = 5;
-const RANKING_POOL_SIZE = 10;
+const RANKING_POOL_SIZE = 8;
 
 function jsonFrom(text) {
   const source = String(text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
@@ -137,7 +137,7 @@ function fallbackPlan(input) {
 async function planSearch(req,input) {
   try {
     const plan = await askModel(req,[
-      {role:'system',content:'把用户需求转换成 GitHub 仓库检索计划，只输出一个 JSON 对象，字段必须完全如下：{"intent":"中文意图","goal":"最终任务","core_capabilities":[{"name":"必须能力","evidence_terms":["2-6个可在仓库原文中核验的中英文短语"]}],"constraints":["明确限制或主观质量要求"],"workflow_queries":["2条完整产品检索词"],"localized_queries":["1条用户语言检索词"],"component_queries":["2条补充组件检索词"]}。规则：1. 用户原话中的输入、整体转换、输出形态和必须条件不能遗漏；媒介必须从输入贯穿到输出，不能把音频输出降成文本。2. workflow_queries 优先召回能直接完成主要任务的产品：第一条保留用户对象与整体动作；第二条使用完整产品通常同时具备的2-3项高辨识度能力，不加 AI、system、tool、platform、pipeline 等泛词。3. localized_queries 使用用户主要语言和仓库作者可能写在名称或简介中的最短产品词组；用户用英文时可为空数组。4. component_queries 只用于补充缺失环节，不能全部写成底层模型或单一步骤。每条查询2-4个概念，总查询不超过5条。5. 每项 evidence_terms 同时覆盖真实仓库常见的英文术语；当用户不是英文提问时，再加入1-2个用户语言中的仓库常用短语。对象与动作不可分时必须同时保留，不能用宽泛 i18n 冒充菜单翻译。6. 主观要求放 constraints；自然、音质、非 AI 腔只能作为待试听验证项，不得当成已证明能力。7. 只加入用户需求确实涉及的术语，不得套用固定领域关键词。'},
+      {role:'system',content:'把用户需求转换成 GitHub 仓库检索计划，只输出一个 JSON 对象，字段必须完全如下：{"intent":"中文意图","goal":"最终任务","core_capabilities":[{"name":"必须能力","evidence_terms":["2-6个可在仓库原文中核验的中英文短语"]}],"constraints":["明确限制或主观质量要求"],"workflow_queries":["2条完整产品检索词"],"localized_queries":["1条用户语言检索词"],"component_queries":["2条补充组件检索词"]}。GitHub 用空格表示 AND，检索词越多越容易零结果；以下格式是硬性要求：每条查询只能有2-3个用空格分隔的词或短语，不得写完整句、介词、连词、源语言到目标语言的完整方向，也不得把中文概念连成一个长词。规则：1. 用户原话中的输入、整体转换、输出形态和必须条件不能遗漏；媒介必须从输入贯穿到输出，不能把音频输出降成文本。复杂任务的每个关键能力单列，不得把多个步骤合并成一项“端到端转换”。2. workflow_queries 优先召回完整产品：第一条只保留用户对象与整体动作这两个产品类别词；第二条使用完整产品通常共同具备的2-3项高辨识度能力。不得加入 AI、system、tool、platform、pipeline 等泛词。3. localized_queries 使用用户主要语言，写成2-3个以空格分隔的最短产品概念；用户用英文时可为空数组。4. component_queries 一条覆盖输入处理，一条覆盖目标输出生成，只用于补充组件，不能全是底层模型。5. 每项 evidence_terms 同时覆盖真实仓库常见的英文术语；当用户不是英文提问时，再加入1-2个用户语言中的仓库常用短语。对象与动作不可分时必须同时保留，不能用宽泛 i18n 冒充菜单翻译。6. 主观要求放 constraints；自然、音质、非 AI 腔只能作为待试听验证项，不得当成已经实测。7. 只加入用户需求确实涉及的术语，不得套用固定领域关键词。'},
       {role:'user',content:JSON.stringify({request:input})}
     ],1200);
     return normalizeAIPlan(plan,input);
@@ -157,7 +157,7 @@ function shape(item) {
 
 function normalizeGithubQuery(query) {
   const source = clean(query,220).replace(/\bsite:github\.com\b/ig,' ').replace(/\bgithub\b/ig,' ');
-  const simplified = source.replace(/\b(?:end[- ]to[- ]end|automated|automatic|natural|expressive|advanced|complete|full|tool|platform|pipeline|system|solution|application)\b/ig,' ').replace(/\s+/g,' ').trim();
+  const simplified = source.replace(/\b(?:end[- ]to[- ]end|automated|automatic|natural|expressive|advanced|complete|full|tool|platform|pipeline|system|solution|application|with|and|for|from|into|using|to)\b/ig,' ').replace(/\s+/g,' ').trim();
   return simplified.split(/\s+/).filter(Boolean).length >= 2 ? simplified : source.replace(/\s+/g,' ').trim();
 }
 
@@ -503,7 +503,7 @@ async function rankAndDescribe(req,input,plan,items) {
   const pool = (evidenced.length >= RANKING_POOL_SIZE ? evidenced : [...evidenced,...scored.filter(entry=>entry.matched === 0)]).slice(0,RANKING_POOL_SIZE);
   try {
     const result = await askModel(req,[
-      {role:'system',content:'你是严格的 GitHub 项目研究员，只输出 JSON：{"items":[{"full_name":"owner/repo","keep":true,"fit_score":0,"title":"中文标题","summary":"适合原因","capability_evidence":[{"capability":"必须能力原名","evidence_quote":"候选资料逐字原文"}],"strengths":["已证明优势"],"limitations":["缺口或未验证项"]}]}。逐项核对输入、输出、必须能力和限制；完整方案优先，部分组件可保留但必须写清缺口。逐字证据不得改写。关键词偶然出现、相邻能力、教程或资源列表 keep=false。主观体验没有试听或实测时必须写“尚未试听/实测，不能保证”。'},
+      {role:'system',content:'你是严格的 GitHub 项目研究员，只输出 JSON：{"items":[{"full_name":"owner/repo","fit_score":0,"title":"中文标题","summary":"适合原因","capability_evidence":[{"capability":"必须能力原名","evidence_quote":"候选资料逐字原文"}],"strengths":["已证明优势"],"limitations":["缺口或未验证项"]}]}。只返回最多6个值得推荐的项目，省略不相关候选，不要输出 keep=false。逐项核对输入、输出、必须能力和限制；完整方案优先，部分组件可保留但必须写清缺口。逐字证据不得改写。关键词偶然出现、相邻能力、教程或资源列表不推荐。主观体验没有试听或实测时必须写“尚未试听/实测，不能保证”。'},
       {role:'user',content:JSON.stringify({request:input,goal:plan.goal,required_capabilities:required.map(check=>check.name),constraints:plan.constraints,candidates:pool.map(({item})=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,readme_excerpt:clean(item.readme_excerpt,700)}))})}
     ],1600);
     const resultItems = result?.items ?? result?.projects ?? result?.results ?? result?.recommendations ?? result?.candidates;

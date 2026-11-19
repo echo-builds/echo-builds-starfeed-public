@@ -106,6 +106,7 @@ test('GitHub 召回去掉会把查询锁死的描述词，保留核心产品类�
   assert.equal(search.normalizeGithubQuery('end-to-end podcast dubbing'),'podcast dubbing');
   assert.equal(search.normalizeGithubQuery('natural expressive TTS Chinese'),'TTS Chinese');
   assert.equal(search.normalizeGithubQuery('automated podcast dubbing system'),'podcast dubbing');
+  assert.equal(search.normalizeGithubQuery('speech translation with voice cloning and natural TTS'),'speech translation voice cloning TTS');
   assert.equal(search.normalizeGithubQuery('menu translation'),'menu translation');
 });
 
