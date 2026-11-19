@@ -1,0 +1,45 @@
+name: Scan RepoScroll feed
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Backfill target (0 for normal scan)'
+        required: false
+        default: '0'
+
+concurrency:
+  group: reposcroll-feed-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    if: ${{ vars.FEED_SCANNER_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - name: Apply database schema
+        run: npm run db:migrate
+      - name: Scan and publish feed
+        run: |
+          if [ "${{ inputs.backfill || '0' }}" = "0" ]; then
+            npm run feed:scan
+          else
+            node scripts/scan-feed.cjs --backfill="${{ inputs.backfill }}"
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GITHUB_API_TOKEN: ${{ secrets.FEED_GITHUB_TOKEN }}
+          FREE_AI_PROVIDER: ${{ vars.FREE_AI_PROVIDER }}
+          ENABLE_FREE_GEMINI: ${{ vars.ENABLE_FREE_GEMINI }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
