@@ -720,7 +720,7 @@ module.exports = async function handler(req,res) {
       (wantsInstructional(plan,input) || !isInstructionalCandidate(item))
     ).length;
     const items = await rankAndDescribe(req,input,plan,rankedCandidates);
-    return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:searchSpecs.map(spec=>spec.query),diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,semantic_rerank:semantic.enabled,returned:items.length},items});
+    return res.status(200).json({mode:plan.mode,intent:plan.intent,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},queries:searchSpecs.map(spec=>spec.query),diagnostic:plan.aiFallbackReason || null,diagnostic_counts:{candidates:candidates.length,eligible:eligibleCount,semantic_rerank:semantic.enabled,returned:items.length},...(req.body?.debug === true ? {debug_candidates:rankedCandidates.map(item=>({full_name:item.full_name,query_index:item._search_query_index,search_rank:item._search_rank,semantic_score:item._semantic_score || 0,matched_capabilities:capabilityMatchCount(item,plan.capability_checks)}))} : {}),items});
   } catch (error) {
     return res.status(502).json({error:'search_unavailable',detail:String(error?.message || '').slice(0,80)});
   }
