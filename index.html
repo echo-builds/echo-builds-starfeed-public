@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="RepoScroll">
-  <meta name="description" content="发现近期高星 GitHub 项目，收藏你想继续看的产品。">
+  <meta name="description" content="发现值得 AI 产品经理关注的开源产品、工具与技术变化。">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -16,6 +16,7 @@
 :root{color-scheme:light;--paper:#fbfaf7;--white:#fff;--ink:#1b1816;--muted:#655f59;--rule:#ebe5df;--red:#c8302c;font:16px/1.5 "PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Inter,system-ui,sans-serif}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink)}
+html,body{overscroll-behavior-y:contain}
 [hidden]{display:none!important}
 button,a{-webkit-tap-highlight-color:transparent}
 button{font:inherit;color:inherit;cursor:pointer}
@@ -37,6 +38,7 @@ main{max-width:1080px;margin:auto;padding:20px 12px calc(148px + env(safe-area-i
 h1{font-size:31px;line-height:1.15;letter-spacing:-.03em;margin:0 0 5px}
 .heading p,.status{font-size:13px;color:var(--muted);margin:0}
 .status{margin:0 3px 11px;font-size:11px}
+.new-projects{position:fixed;z-index:5;top:calc(64px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);border:0;border-radius:999px;background:var(--ink);color:#fff;padding:9px 15px;font-size:12px;font-weight:750;box-shadow:0 8px 24px #18120d2e}
 .feed{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px 9px}
 .feed-sentinel{min-height:72px;display:grid;place-items:center;color:var(--muted);font-size:12px;text-align:center}
 .card{background:white;border:1px solid var(--rule);border-radius:11px;min-width:0;overflow:hidden}
@@ -164,9 +166,10 @@ dialog::backdrop{background:#18161280}
   <main>
     <section class="heading">
       <h1 id="heading">推荐</h1>
-      <p id="lede">发现近期新创建或刚完成重要迭代的高星项目，聚焦与 AI 产品经理息息相关的产品与工具</p>
+      <p id="lede">发现值得 AI 产品经理关注的开源产品、工具与技术变化</p>
     </section>
     <p id="status" class="status" role="status" hidden></p>
+    <button id="new-projects" class="new-projects" type="button" hidden></button>
     <section id="feed" class="feed" aria-label="项目"></section>
     <div id="feed-sentinel" class="feed-sentinel" aria-live="polite">继续下滑，发现更早收录的项目</div>
     <div id="groups" hidden></div>
@@ -233,6 +236,7 @@ const DAY = 86400000;
 const DISCOVERY_WINDOW_DAYS = 14;
 const ignored = new Set(['ai','open-source','javascript','typescript','python','react','opensource','web','app','github','go','rust','self-hosted','nextjs','docker']);
 const repoKey = ({full_name}) => full_name.toLowerCase();
+const feedKey = repo => repo.feed_event_id ? 'event:' + repo.feed_event_id : 'repo:' + repoKey(repo);
 
 function topicsOf(repo) {
   return [...new Set((repo.topics || []).filter(t => typeof t === 'string' && /^[a-z0-9][a-z0-9-]{1,39}$/.test(t) && !ignored.has(t)))];
@@ -481,7 +485,7 @@ function enrich(repo) {
   return {...merged,published_at:repo.published_at || note.published_at,theme:theme || inferTheme(merged),forPM,what,why,tryIt,
     url:'https://github.com/' + repo.full_name};
 }
-const previous = storage.get('recent-v2',null);
+const previous = storage.get('recent-v3',storage.get('recent-v2',null));
 const oldCatalog = Array.isArray(previous?.repos) ? previous.repos.filter(repo=>validRepo(repo) && (guides[repoKey(repo)] ||
   (Number(repo.forks_count) >= MIN_FORKS && repo.license?.spdx_id && !['NOASSERTION','OTHER'].includes(repo.license.spdx_id)))) : [];
 const oldSaved = storage.get('saved',[]);
@@ -500,6 +504,11 @@ const state = {
   loadingMore:false,
   discoveryDone:false,
   discoveryCursor:null,
+  timelineAvailable:null,
+  newCount:0,
+  feedHead:null,
+  returnEventId:null,
+  restorePending:true,
   lastFetch:0,
   saved:new Map((Array.isArray(oldSaved) ? oldSaved.filter(validRepo) : []).map(repo => [repoKey(repo),repo])),
   auth:null,
@@ -509,6 +518,7 @@ const state = {
   syncNeedsRetry:false,
   syncStatus:'',
   trigger:null, openRepo:null, refreshError:false,
+  progress:storage.get('feed-progress-v1',{latest_seen_event_id:null,resume_event_id:null,updated_at:null}),
   search:{query:'',items:[],loading:false,error:''}
 };
 const titleOf = repo => repo.title || repo.name || repo.full_name.split('/')[1];
@@ -563,8 +573,8 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover} = item;
-  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,feed_event_id,feed_event_type,feed_published_at,star_velocity_24h} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,feed_event_id,feed_event_type,feed_published_at,star_velocity_24h,approximate:false};
 }
 function credibleRepo(item) {
   const text = `${item.name || ''} ${item.description || ''}`;
@@ -602,7 +612,7 @@ function updateStatus(message = '') {
     return;
   }
   node.textContent = message || (state.refreshError ? 'GitHub 暂时没有返回新内容，继续显示已有项目。' :
-    state.source === 'live' ? '' :
+    state.source === 'live' || state.source === 'timeline' ? '' :
     state.source === 'cache' ? '正在获取 GitHub 最新项目…' : '正在连接 GitHub…');
   node.hidden = state.view === 'saved' || !node.textContent;
 }
@@ -643,31 +653,55 @@ async function loadDiscover({reset = false} = {}) {
   state.refreshError = false;
   if (reset) {
     state.discoveryDone = false;
-    state.discoveryCursor = 1;
+    state.discoveryCursor = null;
   }
   const sentinel = $('#feed-sentinel');
   sentinel.textContent = reset ? '正在筛选近期高质量项目…' : '正在加载更早收录的项目…';
   const baseline = state.catalog.length >= 8 ? state.catalog : getCuratedCatalog();
   const current = reset ? baseline : state.catalog;
-  const currentKeys = new Set(current.map(repoKey));
-  const cursor = Number(state.discoveryCursor || 1);
+  const currentKeys = new Set(current.map(feedKey));
+  const cursor = state.discoveryCursor;
   let incoming = [];
   try {
-    const response = await fetch('/api/discover?page=' + cursor + '&quality=4',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
-    if (!response.ok) throw new Error('Discover HTTP ' + response.status);
-    const data = await response.json();
+    let response;
+    let data;
+    if (state.timelineAvailable !== false) {
+      const params = new URLSearchParams({limit:'20'});
+      if (!reset && cursor) params.set('before',String(cursor));
+      if (state.progress.latest_seen_event_id) params.set('seen',String(state.progress.latest_seen_event_id));
+      response = await fetch('/api/feed?' + params,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(30000)});
+      if (response.ok) {
+        data = await response.json();
+        state.timelineAvailable = true;
+      } else if ([404,503].includes(response.status)) {
+        state.timelineAvailable = false;
+      } else if (response.status < 500) throw new Error('Feed HTTP ' + response.status);
+    }
+    if (!data) {
+      const page = Number(cursor || 1);
+      response = await fetch('/api/discover?page=' + page + '&quality=4',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
+      if (!response.ok) throw new Error('Discover HTTP ' + response.status);
+      data = await response.json();
+      data.next_cursor = Number(data.next_page || page + 1);
+    }
     incoming = (Array.isArray(data?.items) ? data.items : []).map(shape);
     const replaceExisting = reset && incoming.length >= 8;
     const merged = new Map();
-    for (const repo of incoming) merged.set(repoKey(repo),repo);
-    if (!replaceExisting) for (const repo of current) if (!merged.has(repoKey(repo))) merged.set(repoKey(repo),repo);
+    const ordered = reset ? [incoming,current] : [current,incoming];
+    for (const group of ordered) for (const repo of group) if (!merged.has(feedKey(repo))) merged.set(feedKey(repo),repo);
+    if (replaceExisting && !state.timelineAvailable) {
+      merged.clear();
+      for (const repo of incoming) merged.set(feedKey(repo),repo);
+    }
     state.catalog = [...merged.values()];
-    state.discoveryCursor = Number(data.next_page || cursor + 1);
+    state.discoveryCursor = data.next_cursor ?? data.next_page ?? null;
     state.discoveryDone = data.has_more === false || incoming.length === 0;
+    state.newCount = reset && state.timelineAvailable ? Number(data.new_count || 0) : state.newCount;
+    state.feedHead = state.timelineAvailable ? Number(data.head_id || state.feedHead || 0) || null : state.feedHead;
     state.date = today();
-    state.source = 'live';
+    state.source = state.timelineAvailable ? 'timeline' : 'live';
     state.lastFetch = Date.now();
-    storage.put('recent-v2',{date:state.date,repos:state.catalog.slice(0,200),cursor:state.discoveryCursor});
+    storage.put('recent-v3',{date:state.date,repos:state.catalog.slice(0,200),cursor:state.discoveryCursor});
   } catch {
     state.refreshError = true;
   } finally {
@@ -676,15 +710,16 @@ async function loadDiscover({reset = false} = {}) {
       const canAppend = !reset && state.view === 'discover' && !state.refreshError;
       if (!canAppend) render();
       else {
-        const additions = incoming.filter(repo=>!currentKeys.has(repoKey(repo))).map(discoveryResult).filter(Boolean).map(card);
+        const additions = incoming.filter(repo=>!currentKeys.has(feedKey(repo))).map(discoveryResult).filter(Boolean).map(card);
         const feed = $('#feed');
         feed.append(...additions);
         if (masonry) for (const item of additions) masonry.observe(item);
         const sentinel = $('#feed-sentinel');
-        sentinel.textContent = state.discoveryDone ? '已看完近期收录的高质量项目' : '继续下滑，发现更早收录的项目';
+        sentinel.textContent = state.discoveryDone ? '已看完当前收录的高质量项目' : '继续下滑，发现更早收录的项目';
         updateStatus();
       }
     }
+    updateNewProjectsButton();
     openRouteDetail();
   }
 }
@@ -767,10 +802,13 @@ function card(repo) {
   const el = $('#card-template').content.firstElementChild.cloneNode(true);
   el.querySelector('h2').textContent = titleOf(repo);
   el.querySelector('.stars').textContent = '★ ' + (repo.approximate ? '约 ' : '') + compact.format(repo.stargazers_count);
-  el.querySelector('.published').remove();
+  const published=el.querySelector('.published');
+  if (repo.feed_event_type==='release') published.textContent='重要更新';
+  else published.remove();
   fillCover(el.querySelector('.cover'),repo);
   const trigger = el.querySelector('.project');
   trigger.dataset.project = repoKey(repo);
+  if (repo.feed_event_id) trigger.dataset.feedEvent = String(repo.feed_event_id);
   trigger.setAttribute('aria-label',`${titleOf(repo)}，查看项目详情`);
   trigger.addEventListener('click',()=>openDetails(repo,trigger));
   return el;
@@ -1032,10 +1070,49 @@ const masonry = 'ResizeObserver' in window ? new ResizeObserver(entries=>{
     if (height > 0) target.style.gridRowEnd = 'span ' + (Math.ceil(height) + 12);
   }
 }) : null;
+let progressSyncTimer = null;
+function saveProgress({latest,resume} = {}) {
+  if (latest) state.progress.latest_seen_event_id = Math.max(Number(state.progress.latest_seen_event_id || 0),Number(latest));
+  if (resume) state.progress.resume_event_id = Number(resume);
+  state.progress.updated_at = new Date().toISOString();
+  storage.put('feed-progress-v1',state.progress);
+  if (!state.auth) return;
+  clearTimeout(progressSyncTimer);
+  progressSyncTimer = setTimeout(()=>fetch('/api/progress',{
+    method:'PUT',headers:{'Content-Type':'application/json',Accept:'application/json'},
+    body:JSON.stringify(state.progress)
+  }).catch(()=>{}),800);
+}
+const readingObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries=>{
+  const visible=entries.filter(entry=>entry.isIntersecting && entry.intersectionRatio>=.55 && entry.target.dataset.feedEvent);
+  if (!visible.length) return;
+  const ordered=visible.sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);
+  const resume=Number(ordered[0].target.dataset.feedEvent);
+  const latest=Math.max(...visible.map(entry=>Number(entry.target.dataset.feedEvent)));
+  saveProgress({latest,resume});
+  if (state.feedHead && Number(state.progress.latest_seen_event_id)>=state.feedHead) {
+    state.newCount=0;
+    updateNewProjectsButton();
+  }
+},{threshold:[.55]}) : null;
 function observeCards(feed) {
-  if (!masonry) return;
-  feed.classList.add('masonry');
-  for (const card of feed.children) masonry.observe(card);
+  if (masonry) feed.classList.add('masonry');
+  for (const item of feed.children) {
+    if (masonry) masonry.observe(item);
+    const trigger=item.querySelector?.('[data-feed-event]');
+    if (trigger) readingObserver?.observe(trigger);
+  }
+}
+function updateNewProjectsButton() {
+  const button=$('#new-projects');
+  button.textContent=state.returnEventId ? '回到上次阅读处' : state.newCount ? `有 ${state.newCount} 个新项目` : '';
+  button.hidden=state.view!=='discover' || (!state.returnEventId && state.newCount<1);
+}
+function restoreReadingPosition() {
+  if (!state.restorePending || state.newCount<1 && !state.progress.resume_event_id) return;
+  state.restorePending=false;
+  const target=document.querySelector(`[data-feed-event="${Number(state.progress.resume_event_id || 0)}"]`);
+  if (target) requestAnimationFrame(()=>target.scrollIntoView({block:'start'}));
 }
 function render() {
   const savedView = state.view === 'saved';
@@ -1046,7 +1123,7 @@ function render() {
   const headingWrap = document.querySelector('.heading');
   headingWrap.classList.toggle('discover-heading',!savedView && !searchView);
   $('#heading').textContent = savedView ? '收藏' : searchView ? '搜索结果' : '';
-  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? '' : '发现近期新创建或刚完成重要迭代的高星项目，聚焦与 AI 产品经理息息相关的产品与工具';
+  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? '' : '发现值得 AI 产品经理关注的开源产品、工具与技术变化';
   $('#lede').hidden = searchView;
   $('#search-dock').hidden = savedView;
   for (const tab of document.querySelectorAll('[data-view]')) {
@@ -1060,6 +1137,7 @@ function render() {
   if (!sentinel.hidden) sentinel.textContent = state.loadingMore ? '正在加载更多…' : state.discoveryDone ? '已看完近期收录的高质量项目' :
     state.refreshError ? '暂时无法继续加载，向上滑动后再试' : '继续下滑，发现更早收录的项目';
   masonry?.disconnect();
+  readingObserver?.disconnect();
   feed.replaceChildren();
   groups.replaceChildren();
   if (savedView) {
@@ -1087,6 +1165,8 @@ function render() {
   empty.querySelector('p').textContent = savedView ? '打开项目详情后，可以把想留着看的项目收进这里。' : searchView ? '换一个更具体的说法，说明输入、期望结果和必须满足的条件。' : '晚点再回来发现新项目。';
   empty.querySelector('button').hidden = !savedView;
   updateStatus();
+  updateNewProjectsButton();
+  if (!savedView && !searchView) restoreReadingPosition();
 }
 function go(view) {
   state.view = view;
@@ -1203,6 +1283,8 @@ async function bootstrapAuth() {
     if (!data.user) return;
     state.auth = {user:data.user};
     renderAccount();
+    await syncReadingProgress();
+    setTimeout(()=>loadDiscover({reset:true}),0);
     await syncGitHubStars();
     if (new URLSearchParams(location.search).has('connected')) {
       const url = new URL(location.href);
@@ -1211,11 +1293,54 @@ async function bootstrapAuth() {
     }
   } catch {}
 }
+async function syncReadingProgress() {
+  if (!state.auth) return;
+  try {
+    const response=await fetch('/api/progress',{headers:{Accept:'application/json'}});
+    if (!response.ok) return;
+    const data=await response.json();
+    const remote=data.progress || {};
+    const localUpdated=Date.parse(state.progress.updated_at || 0);
+    const remoteUpdated=Date.parse(remote.updated_at || 0);
+    state.progress.latest_seen_event_id=Math.max(Number(state.progress.latest_seen_event_id || 0),Number(remote.latest_seen_event_id || 0)) || null;
+    if (remote.resume_event_id && remoteUpdated>localUpdated) {
+      state.progress.resume_event_id=Number(remote.resume_event_id);
+      state.restorePending=true;
+    }
+    saveProgress({latest:state.progress.latest_seen_event_id,resume:state.progress.resume_event_id});
+  } catch {}
+}
 for (const tab of document.querySelectorAll('[data-view]')) tab.addEventListener('click',()=>go(tab.dataset.view));
 $('#search-form').addEventListener('submit',event=>{ event.preventDefault(); searchGitHub($('#project-search').value); });
 $('#project-search').addEventListener('input',event=>{ $('#search-clear').hidden = !event.target.value; });
 $('#search-clear').addEventListener('click',()=>{ go('discover'); $('#project-search').focus(); });
 $('#empty button').addEventListener('click',()=>go('discover'));
+$('#new-projects').addEventListener('click',()=>{
+  if (state.returnEventId) {
+    const target=document.querySelector(`[data-feed-event="${Number(state.returnEventId)}"]`);
+    state.returnEventId=null;
+    updateNewProjectsButton();
+    target?.scrollIntoView({block:'start',behavior:'smooth'});
+    return;
+  }
+  state.returnEventId=Number(state.progress.resume_event_id || 0) || null;
+  updateNewProjectsButton();
+  window.scrollTo({top:0,behavior:'smooth'});
+});
+let pullStart=null;
+document.addEventListener('touchstart',event=>{
+  if (scrollY<=0 && event.touches.length===1) pullStart=event.touches[0].clientY;
+},{passive:true});
+document.addEventListener('touchend',event=>{
+  if (pullStart===null) return;
+  const distance=(event.changedTouches[0]?.clientY || pullStart)-pullStart;
+  pullStart=null;
+  if (scrollY<=0 && distance>72 && state.view==='discover') {
+    updateStatus('正在检查新项目…');
+    state.restorePending=true;
+    loadDiscover({reset:true});
+  }
+},{passive:true});
 const discoveryObserver = new IntersectionObserver(entries=>{
   if (entries.some(entry=>entry.isIntersecting) && state.view === 'discover') loadDiscover();
 },{rootMargin:'600px 0px'});
