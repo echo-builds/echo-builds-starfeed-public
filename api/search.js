@@ -99,10 +99,44 @@ function complementaryQueries(plan) {
   return planQuerySpecs(plan).map(spec=>spec.query);
 }
 
+function deriveCapabilitySignature(query,checks) {
+  const actionTokens = normalizeGithubQuery(query).split(/\s+/).filter(token=>/^[a-z0-9+#.-]+$/i.test(token));
+  const action = actionTokens.at(-1);
+  const phrases = (Array.isArray(checks) ? checks : []).flatMap(check=>check.evidence_terms || []);
+  const evidence = phrases.find(term=>{
+    const tokens = normalizeGithubQuery(term).split(/\s+/).filter(token=>/^[a-z0-9+#.-]+$/i.test(token));
+    return tokens.length >= 2 && tokens.length <= 3;
+  });
+  if (!action || !evidence) return '';
+  const evidenceTokens = normalizeGithubQuery(evidence).split(/\s+/).filter(token=>/^[a-z0-9+#.-]+$/i.test(token));
+  return unique([...evidenceTokens.slice(0,2),action],3).join(' ');
+}
+
 function normalizeAIPlan(plan,input) {
-  const query_specs = planQuerySpecs(plan);
+  let query_specs = planQuerySpecs(plan);
   if (!query_specs.length) throw new Error('empty_queries');
   const checks = expandComplexEvidence(capabilityChecks(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves));
+  const workflowIndexes = query_specs.map((spec,index)=>spec.kind === 'workflow' ? index : -1).filter(index=>index >= 0);
+  if (workflowIndexes.length) {
+    const derived = deriveCapabilitySignature(query_specs[workflowIndexes[0]].query,checks);
+    if (derived) {
+      const target = workflowIndexes[1] ?? workflowIndexes[0] + 1;
+      const next = [...query_specs];
+      const existing = next.findIndex(spec=>spec.query.toLowerCase() === derived.toLowerCase());
+      if (existing < 0) {
+        if (workflowIndexes[1] != null) next[target] = {query:derived,kind:'workflow'};
+        else next.splice(target,0,{query:derived,kind:'workflow'});
+        query_specs = next.slice(0,MAX_QUERY_COUNT);
+      }
+    }
+  }
+  const seenQueries = new Set();
+  query_specs = query_specs.map(spec=>({...spec,query:normalizeGithubQuery(spec.query)})).filter(spec=>{
+    const key = spec.query.toLowerCase();
+    if (!key || seenQueries.has(key)) return false;
+    seenQueries.add(key);
+    return true;
+  });
   return {
     intent:clean(plan.intent) || input,
     goal:clean(plan.goal) || clean(plan.intent) || input,
@@ -156,7 +190,10 @@ function shape(item) {
 }
 
 function normalizeGithubQuery(query) {
-  const source = clean(query,220).replace(/\bsite:github\.com\b/ig,' ').replace(/\bgithub\b/ig,' ');
+  const source = clean(query,220)
+    .replace(/\bsite:github\.com\b/ig,' ')
+    .replace(/\bgithub\b/ig,' ')
+    .replace(/(?:自动|自然|智能|一键|完整|高级|开源)/gu,' ');
   const simplified = source.replace(/\b(?:end[- ]to[- ]end|automated|automatic|natural|expressive|advanced|complete|full|tool|platform|pipeline|system|solution|application|with|and|for|from|into|using|to)\b/ig,' ').replace(/\s+/g,' ').trim();
   return simplified.split(/\s+/).filter(Boolean).length >= 2 ? simplified : source.replace(/\s+/g,' ').trim();
 }
@@ -607,5 +644,5 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional};
+module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional};
 

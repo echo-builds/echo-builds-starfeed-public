@@ -76,10 +76,28 @@ test('完整产品、用户语言和组件检索分层执行，完整产品始�
     component_queries:['speaker diarization','multi speaker TTS','voice cloning']
   },'英文访谈转中文多人音频');
   assert.deepEqual(plan.queries,[
-    'interview dubbing','speech dubbing transcription','访谈 翻译 配音',
+    'interview dubbing','audio transcription dubbing','访谈 翻译 配音',
     'speaker diarization','multi speaker TTS'
   ]);
   assert.deepEqual(plan.query_specs.map(spec=>spec.kind),['workflow','workflow','localized','component','component']);
+});
+
+test('第二条产品检索由输入能力和整体动作组成，不依赖模型逐字猜中',()=>{
+  assert.equal(search.deriveCapabilitySignature('podcast dubbing',[
+    {name:'音频转写',evidence_terms:['speech transcription','语音转文字']},
+    {name:'说话人识别',evidence_terms:['speaker diarization']}
+  ]),'speech transcription dubbing');
+});
+
+test('返回给前端的检索词与 GitHub 实际执行词一致',()=>{
+  const plan=search.normalizeAIPlan({
+    intent:'播客翻译',goal:'播客配音',
+    core_capabilities:[{name:'转写',evidence_terms:['speech transcription','语音转写']}],
+    workflow_queries:['audio dubbing','speech translation'],
+    localized_queries:['播客 自动配音'],component_queries:['speaker diarization']
+  },'播客翻译');
+  assert.ok(plan.queries.includes('播客 配音'));
+  assert.ok(!plan.queries.some(query=>query.includes('自动')));
 });
 
 test('中文仓库说明可以作为能力证据，不要求作者必须写英文术语',()=>{
@@ -107,6 +125,7 @@ test('GitHub 召回去掉会把查询锁死的描述词，保留核心产品类�
   assert.equal(search.normalizeGithubQuery('natural expressive TTS Chinese'),'TTS Chinese');
   assert.equal(search.normalizeGithubQuery('automated podcast dubbing system'),'podcast dubbing');
   assert.equal(search.normalizeGithubQuery('speech translation with voice cloning and natural TTS'),'speech translation voice cloning TTS');
+  assert.equal(search.normalizeGithubQuery('播客 自动配音'),'播客 配音');
   assert.equal(search.normalizeGithubQuery('menu translation'),'menu translation');
 });
 
