@@ -597,7 +597,7 @@ function loadMeta(repo, force = false) {
 function updateStatus(message = '') {
   const node = $('#status');
   if (state.view === 'search') {
-    node.textContent = message || (state.search.loading ? '正在理解你真正想要的能力，并筛选高质量项目…' : state.search.error || '');
+    node.textContent = message || (state.search.loading ? '正在理解你真正想要的能力，并筛选高质量项目…' : state.search.error || state.search.hint || '');
     node.hidden = !node.textContent;
     return;
   }
@@ -724,7 +724,7 @@ function searchResult(item, query) {
   const prepared = notes[repoKey(repo)];
   const aiCopy = item.ai_title || item.ai_summary ? {title:item.ai_title,summary:item.ai_summary} : null;
   const copy = prepared || aiCopy || conservativeSearchCopy(item);
-  return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:copy.summary,ai_bullets:item.ai_bullets || repo.ai_bullets,coverText:copy.summary};
+  return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:copy.summary,ai_bullets:item.ai_bullets || repo.ai_bullets,ai_limitations:item.ai_limitations || [],ai_evidence:item.ai_evidence || [],fitScore:item.fit_score,capabilityCoverage:item.capability_coverage,assessmentMode:item.assessment_mode,coverText:copy.summary};
 }
 async function searchGitHub(input) {
   const query = input.trim();
@@ -751,18 +751,11 @@ async function searchGitHub(input) {
     if (!Array.isArray(data?.items)) throw new Error('No search results');
     state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
     state.search.hint = data.mode === 'ai'
-      ? `已理解为“${data.intent || query}”，找到 ${state.search.items.length} 个项目；核心需求匹配优先，Star、活跃度和项目质量作为辅助`
+      ? `已理解为“${data.intent || query}”，找到 ${state.search.items.length} 个项目；已按 README 证据核对关键能力，主观体验仍需试听或实测`
       : `智能理解暂不可用，已使用通用降级检索找到 ${state.search.items.length} 个候选项目`;
   } catch {
-    try {
-      const params = new URLSearchParams({q:naturalSearchQuery(query),sort:'stars',order:'desc',per_page:'20'});
-      const data = await request(API + '/search/repositories?' + params);
-      if (!Array.isArray(data?.items)) throw new Error('No search results');
-      state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
-      state.search.hint = `服务暂不可用，已使用通用关键词检索；请进入 README 核对候选项目的具体能力`;
-    } catch {
-      state.search.error = 'GitHub 暂时没有返回结果，请稍后再试';
-    }
+    state.search.items = [];
+    state.search.error = '智能搜索暂时不可用。为避免给出不相关项目，本次不展示通用关键词结果，请稍后重试。';
   } finally {
     state.search.loading = false;
     $('#search-form .search-submit').disabled = false;
@@ -949,6 +942,12 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   header.textContent = titleOf(repo);
   const meta = paragraph(`${repo.full_name} · ★ ${repo.approximate ? '约 ' : ''}${exact.format(repo.stargazers_count)}`,'detail-meta');
   details.replaceChildren(header,meta);
+  if (repo.searchResult) {
+    if (repo.summary) details.append(section('为什么推荐',repo.summary));
+    if (Array.isArray(repo.ai_bullets) && repo.ai_bullets.length) details.append(section('已核验的优势',repo.ai_bullets));
+    if (Array.isArray(repo.ai_limitations) && repo.ai_limitations.length) details.append(section('使用门槛或未验证',repo.ai_limitations));
+    if (Array.isArray(repo.ai_evidence) && repo.ai_evidence.length) details.append(section('README 证据',repo.ai_evidence));
+  }
   const readmeBody = document.createElement('article');
   readmeBody.className = 'readme-body';
   readmeBody.append(paragraph('正在读取 README 中的产品介绍…','loading-copy'));
@@ -1291,3 +1290,4 @@ bootstrapAuth();
 </script>
 </body>
 </html>
+

@@ -52,7 +52,7 @@ test('候选必须逐项命中核心能力的可核验术语',()=>{
   assert.equal(search.capabilityEvidenceSupported(incomplete,checks),false);
 });
 
-test('多项必须能力会自动补充交叉召回词而不是依赖领域特判',()=>{
+test('检索计划只使用模型生成的英文查询，不把中文或拼接能力名直接送进 GitHub',()=>{
   const plan = {
     goal:'评测 Agent 是否可靠并追踪每一步调用',
     queries:['LLM agent reliability benchmark'],
@@ -62,8 +62,59 @@ test('多项必须能力会自动补充交叉召回词而不是依赖领域特�
     ]
   };
   const queries = search.complementaryQueries(plan);
-  assert.ok(queries.some(query=>/agent evaluation (?:tracing|observability)/i.test(query)));
-  assert.ok(queries.includes('LLM agent reliability benchmark'));
+  assert.deepEqual(queries,['LLM agent reliability benchmark']);
+});
+
+test('GitHub 召回去掉会把查询锁死的描述词，保留核心产品类别',()=>{
+  assert.equal(search.normalizeGithubQuery('end-to-end podcast dubbing'),'podcast dubbing');
+  assert.equal(search.normalizeGithubQuery('natural expressive TTS Chinese'),'TTS Chinese');
+  assert.equal(search.normalizeGithubQuery('menu translation'),'menu translation');
+});
+
+test('资源链接合集不会作为可运行产品进入推荐',()=>{
+  assert.equal(search.isCollectionCandidate({name:'voiceai',description:'Set of notes and links to help people build Voice AI agents'}),true);
+  assert.equal(search.isCollectionCandidate({name:'voice-pro',description:'Gradio WebUI for transcription, translation and voice cloning'}),false);
+});
+
+test('证据匹配识别 translate translation 与 transcribe transcription 的同根词',()=>{
+  assert.equal(search.stemToken('translate'),search.stemToken('translation'));
+  assert.equal(search.stemToken('transcribes'),search.stemToken('transcription'));
+  assert.equal(search.capabilityEvidenceSupportedInText('Drop an audio file, transcribe it, translate the script and export the dub.',[
+    {name:'音频转录',evidence_terms:['audio transcription']},
+    {name:'内容翻译',evidence_terms:['script translation']}
+  ]),true);
+});
+
+test('复杂任务同时保留具体证据短语和可核验的核心动作',()=>{
+  const checks = search.expandComplexEvidence([
+    {name:'转录',evidence_terms:['audio transcription','ASR']},
+    {name:'翻译',evidence_terms:['context-aware translation']},
+    {name:'配音',evidence_terms:['expressive speech synthesis','voice cloning']}
+  ]);
+  assert.ok(checks[0].evidence_terms.includes('transcription'));
+  assert.ok(checks[0].evidence_terms.includes('ASR'));
+  assert.ok(checks[1].evidence_terms.includes('translation'));
+  assert.ok(checks[2].evidence_terms.includes('synthesis'));
+});
+
+test('复杂需求至少覆盖四成关键能力，防止只命中边缘步骤就被推荐',()=>{
+  assert.equal(search.minimumCapabilityCoverage(1),1);
+  assert.equal(search.minimumCapabilityCoverage(2),.5);
+  assert.equal(search.minimumCapabilityCoverage(4),.4);
+  assert.ok(1 / 4 < search.minimumCapabilityCoverage(4));
+  assert.ok(2 / 5 >= search.minimumCapabilityCoverage(5));
+});
+
+test('短查询必须命中与原话重合最高的核心能力，派生步骤不能替代用户动作',()=>{
+  const checks = [
+    {name:'菜单内容识别与 OCR',evidence_terms:['menu OCR']},
+    {name:'菜单翻译与语言转换',evidence_terms:['menu translation']},
+    {name:'视觉布局保留',evidence_terms:['layout preservation']}
+  ];
+  assert.deepEqual(search.primaryRequestChecks('菜单翻译的项目',checks).map(check=>check.name),['菜单翻译与语言转换']);
+  assert.deepEqual(search.primaryRequestChecks('给我搜索英文播客转成自然中文多人播客对话的端到端项目',checks),[]);
+  assert.ok(1 / checks.length < search.minimumCapabilityCoverage(checks.length));
+  assert.ok(2 / checks.length >= search.minimumCapabilityCoverage(checks.length));
 });
 
 test('README 摘要优先保留能证明核心能力的后置段落',()=>{
@@ -106,6 +157,17 @@ test('能力证据名称轻微变化时按内容匹配而不是整批误杀',()=
   ],claims),true);
 });
 
+test('AI 只证明了部分能力时，标签只展示有逐字证据的能力',()=>{
+  const item = {description:'Expressive multilingual TTS with true-to-life voice cloning',topics:['tts'],readme_excerpt:''};
+  const checks = [
+    {name:'音频转录',evidence_terms:['audio transcription','speech to text']},
+    {name:'高质量语音合成',evidence_terms:['expressive TTS','voice cloning']}
+  ];
+  const claims = [{capability:'高质量语音合成',evidence_quote:'Expressive multilingual TTS with true-to-life voice cloning'}];
+  assert.deepEqual(search.supportedCapabilityClaims(item,checks,claims).map(check=>check.name),['高质量语音合成']);
+  assert.equal(search.capabilityClaimsSupported(item,checks,claims),false);
+});
+
 test('能力证据不能用相邻能力冒充用户要求的录制回放',()=>{
   const item = {description:'Browser automation server using Playwright',topics:['mcp'],readme_excerpt:'Provides code generation in TypeScript and Python.'};
   const claims = [
@@ -141,6 +203,63 @@ test('本地降级要求核心能力出现在仓库主元数据而非 README 偶
   const incidental = {full_name:'demo/course',description:'AI learning course',topics:['education'],readme_excerpt:'A chapter mentions mobile inference and offline execution.'};
   assert.equal(search.primaryCapabilityEvidenceSupported(direct,checks),true);
   assert.equal(search.primaryCapabilityEvidenceSupported(incidental,checks),false);
+});
+
+test('AI 已确认 README 能力证据后不会在确定性排序中把全部候选丢掉',()=>{
+  const plan = {
+    goal:'把播客音频转成文字',
+    intent:'寻找开源播客转文字工具',
+    core_capabilities:['speech to text'],
+    constraints:[],
+    queries:['podcast transcription tool','speech to text transcription'],
+    capability_checks:[{name:'音频转文字',evidence_terms:['speech to text','transcription']}]
+  };
+  const item = {
+    full_name:'demo/audio-tool',name:'audio-tool',description:'Audio toolkit',topics:['audio'],
+    readme_excerpt:'Transcribe podcast recordings with speech to text.',
+    stargazers_count:8000,forks_count:200,pushed_at:new Date().toISOString(),license:{spdx_id:'MIT'}
+  };
+  assert.equal(search.fallbackRank(plan,[item]).length,0);
+  assert.equal(search.fallbackRank(plan,[item],{allowReadmeEvidence:true})[0].full_name,'demo/audio-tool');
+});
+
+test('多词能力必须在同一语义窗口出现，不能把散落的 menu 和 translation 拼成菜单翻译',()=>{
+  const checks = [{name:'菜单内容翻译',evidence_terms:['menu translation','menu localization']}];
+  assert.equal(search.capabilityEvidenceSupportedInText('This plugin implements multilingual translation of resident menu bar items.',checks),true);
+  assert.equal(search.capabilityEvidenceSupportedInText('Translation plugin for documents. The package also contains many unrelated sections and configuration examples before a context menu is mentioned.',checks),false);
+});
+
+test('存在完整组合词时忽略 i18n 和 localization 这类宽泛单词',()=>{
+  const checks = [{name:'菜单内容翻译',evidence_terms:['menu translation','i18n','localization','translate menu']}];
+  assert.equal(search.capabilityEvidenceSupportedInText('Developer friendly web localization platform with i18n workflows.',checks),false);
+  assert.equal(search.capabilityEvidenceSupportedInText('Translate resident menu items and context menu labels.',checks),true);
+});
+
+test('多条件需求允许统计部分能力覆盖，用于完整方案优先、组件方案补充',()=>{
+  const checks = [
+    {name:'播客转写',evidence_terms:['podcast transcription','speech to text']},
+    {name:'中文配音',evidence_terms:['Chinese dubbing','Mandarin speech synthesis']},
+    {name:'多人说话人',evidence_terms:['speaker diarization','multiple speakers']}
+  ];
+  const complete = {description:'Podcast transcription with Chinese dubbing and multiple speakers.',topics:[],readme_excerpt:''};
+  const partial = {description:'Natural Mandarin speech synthesis for multiple speakers.',topics:[],readme_excerpt:''};
+  assert.equal(search.capabilityMatchCount(complete,checks),3);
+  assert.equal(search.capabilityMatchCount(partial,checks),2);
+});
+
+test('复杂中文需求的降级计划不能被当作已经完成的 AI 理解结果',()=>{
+  const plan = search.fallbackPlan('英文播客转成自然的中文多人对话');
+  assert.equal(plan.mode,'fallback');
+  assert.equal(plan.mode === 'ai',false);
+});
+
+
+test('前端智能搜索失败时不再降级展示未经验证的 GitHub 关键词结果',()=>{
+  const fs = require('node:fs');
+  const html = fs.readFileSync(require('node:path').join(__dirname,'..','index.html'),'utf8');
+  const searchBlock = html.slice(html.indexOf('async function searchGitHub'),html.indexOf('function card('));
+  assert.match(searchBlock,/为避免给出不相关项目/);
+  assert.doesNotMatch(searchBlock,/API \+ '\/search\/repositories\?'/);
 });
 
 test('AI 规划降级时证据必须覆盖原始需求而非只命中相邻能力',()=>{
@@ -295,7 +414,7 @@ test('千问使用 Cloudflare Workers AI 免费路径，且不会自动调用付
     );
     process.env.CLOUDFLARE_ACCOUNT_ID='0123456789abcdef0123456789abcdef';
     process.env.CLOUDFLARE_API_TOKEN='test-secret-not-real';
-    assert.equal(freeAI.provider(),'cloudflare-qwen');
+    assert.equal(freeAI.provider(),'cloudflare-free');
     assert.equal(freeAI.enabled(),true);
   } finally {
     for (const [key,value] of Object.entries(before)) {
@@ -327,7 +446,9 @@ test('Cloudflare Qwen 请求使用正确端点并解析自然语言搜索的 JSO
     };
     const result=await freeAI.generateJSON([{role:'user',content:'找能自动完成任务的开源工具'}]);
     assert.equal(requested.url,'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/v1/chat/completions');
-    assert.equal(JSON.parse(requested.options.body).model,'@cf/qwen/qwen3.8-27b');
+    assert.equal(JSON.parse(requested.options.body).model,'@cf/google/gemma-4-26b-a4b-it');
+    assert.deepEqual(JSON.parse(requested.options.body).response_format,{type:'json_object'});
+    assert.deepEqual(JSON.parse(requested.options.body).chat_template_kwargs,{enable_thinking:false});
     assert.deepEqual(result.queries,['workflow automation','agent tools']);
   } finally {
     global.fetch=originalFetch;
@@ -341,3 +462,4 @@ test('Cloudflare Qwen 请求使用正确端点并解析自然语言搜索的 JSO
     }
   }
 });
+

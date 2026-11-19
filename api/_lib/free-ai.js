@@ -1,15 +1,22 @@
 // Explicit free-only providers. Never fall back to a paid AI Gateway.
 const GEMINI_MODEL = process.env.GEMINI_FREE_MODEL || 'gemini-2.5-flash-lite';
-// Fixed model prevents accidental paid-model selection.
-const CLOUDFLARE_QWEN_MODEL = '@cf/qwen/qwen3.8-27b';
+// Keep Cloudflare on an explicit free-plan allowlist. Gemma 4 is a 26B MoE
+// model with only 4B active parameters, which is a better fit for a
+// latency-sensitive query-planning step than the previous dense 27B model.
+const CLOUDFLARE_FREE_MODELS = new Set([
+  '@cf/google/gemma-4-26b-a4b-it',
+  '@cf/qwen/qwen3.8-27b'
+]);
+const CLOUDFLARE_FREE_MODEL = process.env.CLOUDFLARE_FREE_MODEL || '@cf/google/gemma-4-26b-a4b-it';
 let active = 0;
 let cooldownUntil = 0;
 
 function provider() {
   const selection = String(process.env.FREE_AI_PROVIDER || '').trim().toLowerCase();
-  if (selection === 'cloudflare-qwen') {
+  if (selection === 'cloudflare-qwen' || selection === 'cloudflare-free') {
     if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN &&
-        /^[0-9a-f]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID)) return 'cloudflare-qwen';
+        /^[0-9a-f]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID) &&
+        CLOUDFLARE_FREE_MODELS.has(CLOUDFLARE_FREE_MODEL)) return 'cloudflare-free';
     return null;
   }
   if (selection !== '' && selection !== 'gemini') return null;
@@ -50,7 +57,7 @@ async function callGemini(messages,options) {
   return text;
 }
 
-async function callCloudflareQwen(messages,options) {
+async function callCloudflareFree(messages,options) {
   // Workers AI is free on the Workers Free plan up to its daily allocation.
   // A Paid plan is not recommended for this zero-cost project.
   const url = 'https://api.cloudflare.com/client/v4/accounts/' +
@@ -62,16 +69,18 @@ async function callCloudflareQwen(messages,options) {
       'Content-Type':'application/json'
     },
     body:JSON.stringify({
-      model:CLOUDFLARE_QWEN_MODEL,
+      model:CLOUDFLARE_FREE_MODEL,
       messages:messages.filter(m=>m?.content).map(m=>({
         role:['system','assistant','user'].includes(m.role) ? m.role : 'user',
         content:String(m.content)
       })),
       temperature:options.temperature ?? 0.1,
-      max_tokens:Math.min(5000,Math.max(128,options.maxTokens || 1600)),
+      max_tokens:Math.min(1600,Math.max(128,options.maxTokens || 800)),
+      ...(options.json === false ? {} : {response_format:{type:'json_object'}}),
+      chat_template_kwargs:{enable_thinking:false},
       stream:false
     }),
-    signal:AbortSignal.timeout(25000)
+    signal:AbortSignal.timeout(Math.min(25000,Math.max(8000,options.timeoutMs || 18000)))
   });
   if (!response.ok) {
     const error = new Error('free_ai_http_'+response.status);
@@ -96,8 +105,8 @@ async function generate(messages,options={}) {
   if (active >= 2) throw new Error('free_ai_busy');
   active++;
   try {
-    return current === 'cloudflare-qwen'
-      ? await callCloudflareQwen(messages,options)
+    return current === 'cloudflare-free'
+      ? await callCloudflareFree(messages,options)
       : await callGemini(messages,options);
   } catch(error) {
     if ([402,403,429].includes(error?.status)) cooldownUntil = Date.now() + 15*60*1000;
@@ -118,3 +127,4 @@ async function generateJSON(messages,options={}) {
   return parseJSON(await generate(messages,options));
 }
 module.exports={provider,enabled,generate,generateJSON};
+

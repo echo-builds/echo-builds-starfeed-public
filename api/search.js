@@ -1,7 +1,11 @@
 const {getSession,refreshSession,setSession} = require('./_lib/session');
 
 const GITHUB_API = 'https://api.github.com';
-const MAX_CANDIDATES = 24;
+// Seven diversified ranks across five complementary searches need 35 slots.
+// Keeping this at 30 silently dropped the deepest long-tail rank, where
+// focused low-star products such as AudioSmith often appear.
+const MAX_CANDIDATES = 35;
+const DIVERSIFIED_RANKS = [0,1,2,4,8,10,14];
 
 function jsonFrom(text) {
   const source = String(text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
@@ -44,21 +48,25 @@ function capabilityChecks(values) {
   }).filter(Boolean).slice(0,8);
 }
 
+function expandComplexEvidence(checks) {
+  if (!Array.isArray(checks) || checks.length < 3) return checks;
+  return checks.map(check=>{
+    const broad = [];
+    for (const term of check.evidence_terms || []) {
+      const words = String(term || '').match(/[A-Za-z][A-Za-z0-9-]*/g) || [];
+      for (const word of words) if (/^[A-Z]{2,6}$/.test(word) || /(?:tion|sion|ing|sis|ment)$/i.test(word)) broad.push(word);
+    }
+    return {...check,evidence_terms:unique([...(check.evidence_terms || []),...broad],8)};
+  });
+}
+
 function focusedTerm(value) {
   const tokens = [...tokenSet(value)].filter(token=>token.length > 2);
   return tokens.slice(-2).join(' ');
 }
 
 function complementaryQueries(plan) {
-  const generated = [];
-  const checks = (Array.isArray(plan?.capability_checks) ? plan.capability_checks : []).filter(check=>check?.name);
-  for (let left = 0; left < checks.length; left++) {
-    for (let right = left + 1; right < checks.length; right++) {
-      const words = [...new Set([...tokenSet(checks[left].name),...tokenSet(checks[right].name)])];
-      if (words.length >= 2) generated.push(words.slice(0,5).join(' '));
-    }
-  }
-  return unique([...generated.slice(0,2),...(Array.isArray(plan?.queries) ? plan.queries : [])],7);
+  return unique(Array.isArray(plan?.queries) ? plan.queries : [],7);
 }
 
 function fallbackPlan(input) {
@@ -83,12 +91,12 @@ function fallbackPlan(input) {
 async function planSearch(req,input) {
   try {
     const plan = await askModel(req,[
-      {role:'system',content:'你把自然语言需求转换成通用的 GitHub 仓库检索计划。只输出 JSON：{"intent":"一句中文意图","goal":"最终要完成的任务","core_capabilities":[{"name":"必须能力","evidence_terms":["README 中可能出现的英文术语或短语"]}],"constraints":["限制条件"],"queries":["英文 GitHub 搜索词"]}。queries 和 constraints 必须是字符串数组。core_capabilities 只能来自用户明确提出的要求或完成输入到输出转换不可缺少的步骤，绝不能自行增加跨平台、特定技术栈、协作方式等新的必须条件。逐项覆盖用户原话中的每个动作、输入、输出和明确限制；例如一句需求包含转换、生成、多人或本地运行时，这些不同要求都必须分别保留，不能因某个候选领域更熟悉而省略。每项不可缺少的能力单独列出，并给出 2-6 个可在 Description、Topics 或 README 中核验的英文术语、同义词或短语；不要把只属于偏好或质量判断的词列为必须能力。先识别目标、输入、期望输出、核心能力和限制条件，再生成 3-5 组互补查询。查询必须使用英文，像人在 GitHub 上发现仓库时会使用的产品类别、技术类别或输入输出组合，至少一条使用常见产品类别或仓库类别；不要带 GitHub、site:github.com，也不要输出只有 code export、key points 这类过宽的结果字段。查询应分别覆盖核心能力、常见技术术语、输入输出关系、产品形态或关键限制，不要把所有条件塞进一条查询。不要预设领域，不要使用针对某个具体场景的固定模板，也不要因为用户提到熟悉品牌就只搜索品牌名。主观词要转换成 README 可核验的能力或指标。每条查询保留 1-5 个高辨识度概念，可使用 language:、topic:、stars:，不得使用 sort:、order:、fork:、archived:。'},
+      {role:'system',content:'把用户需求转换成 GitHub 仓库检索计划，只输出一个 JSON 对象，字段必须完全如下：{"intent":"中文意图","goal":"最终任务","core_capabilities":[{"name":"必须能力","evidence_terms":["2-6个英文证据短语"]}],"constraints":["明确限制或主观质量要求"],"queries":["4-6个英文 GitHub 搜索短语"]}。规则：1. 用户原话中的输入、转换步骤、输出形态和必须条件不能遗漏，每项必须能力单列；音频、视频、图片、文本等媒介必须从输入贯穿到输出，不能把“生成中文播客”降成只生成中文文本。2. 复杂转换要拆成真实项目会实现的关键环节，例如识别输入、保留结构、内容转换、生成目标输出；但不添加用户没说的平台或技术栈。3. 主观要求放 constraints，例如自然、非 AI 腔；同时把 README 可核验的相关能力作为搜索线索，但不得把这些线索当成已经实测。4. evidence_terms 使用真实仓库常见的英文类别、实现术语和同义词，不只直译用户原话；对象与动作不可分时必须同时保留，menu translation 不能写成宽泛的 i18n。5. queries 必须互补：至少包含一条端到端产品类别、一条输入处理类别、一条目标输出类别、一条更宽但能处理相同媒介的相邻产品类别。涉及音视频跨语言转换时，应按需求覆盖 dubbing、speech translation、speaker diarization、voice cloning、multi-speaker TTS 等真实仓库术语；不涉及时不得硬加。每条 1-5 个高辨识度英文概念，不输出解释文字。'},
       {role:'user',content:JSON.stringify({request:input})}
-    ],1800);
-    const queries = unique(plan.queries ?? plan.search_queries ?? plan.github_queries ?? plan.search_strategies ?? plan.strategies,5);
+    ],1200);
+    const queries = unique(plan.queries ?? plan.search_queries ?? plan.searchQueries ?? plan.github_queries ?? plan.githubQueries ?? plan.search_strategies ?? plan.searchStrategies ?? plan.strategies,5);
     if (!queries.length) throw new Error('empty_queries');
-    const checks = capabilityChecks(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves);
+    const checks = expandComplexEvidence(capabilityChecks(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves));
     const shaped = {
       intent:clean(plan.intent) || input,
       goal:clean(plan.goal) || clean(plan.intent) || input,
@@ -114,8 +122,14 @@ function shape(item) {
   return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,archived,fork,default_branch};
 }
 
+function normalizeGithubQuery(query) {
+  const source = clean(query,220).replace(/\bsite:github\.com\b/ig,' ').replace(/\bgithub\b/ig,' ');
+  const simplified = source.replace(/\b(?:end[- ]to[- ]end|automated|automatic|natural|expressive|advanced|complete|full|tool|platform|pipeline)\b/ig,' ').replace(/\s+/g,' ').trim();
+  return simplified.split(/\s+/).filter(Boolean).length >= 2 ? simplified : source.replace(/\s+/g,' ').trim();
+}
+
 async function githubSearch(query,token) {
-  const cleaned = clean(query,220).replace(/\bsite:github\.com\b/ig,' ').replace(/\bgithub\b/ig,' ').replace(/\s+/g,' ').trim();
+  const cleaned = normalizeGithubQuery(query);
   const scope = /\bin:/.test(cleaned) ? '' : ' in:name,description,readme,topics';
   const q = `${cleaned}${scope} archived:false fork:false`;
   const params = new URLSearchParams({q,per_page:'35'});
@@ -183,13 +197,17 @@ async function withReadmes(items,checks) {
 
 function tokenSet(value) {
   const text = String(value || '').toLowerCase().replace(/[-_/]+/g,' ');
-  const words = text.match(/[a-z0-9][a-z0-9.+#]{1,}|[㐀-鿿]{2,8}/gu) || [];
+  const words = (text.match(/[a-z0-9][a-z0-9.+#]{1,}|[㐀-鿿]{2,8}/gu) || []).map(word=>word.replace(/\.+$/,''));
   const ignored = new Set(['github','repo','repository','project','projects','open','source','tool','tools','一个','项目','工具','可以','支持','需要','希望']);
   return new Set(words.filter(word=>!ignored.has(word)));
 }
 
 function stemToken(value) {
   const token = String(value || '').toLowerCase();
+  if (/^translat/.test(token)) return 'translat';
+  if (/^transcri/.test(token)) return 'transcript';
+  if (/^synthesi|^synthesiz/.test(token)) return 'synth';
+  if (/^convers/.test(token)) return 'convers';
   if (token.length <= 4) return token;
   if (/cing$/.test(token)) return token.slice(0,-3) + 'e';
   if (/ing$/.test(token)) return token.slice(0,-3).replace(/(.)\1$/,'$1');
@@ -206,16 +224,48 @@ function capabilityEvidenceSupported(item,checks) {
   return capabilityEvidenceSupportedInText(`${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`,required);
 }
 
+function capabilityMatchCount(item,checks,primaryOnly = false) {
+  const required = (Array.isArray(checks) ? checks : []).filter(check=>Array.isArray(check?.evidence_terms) && check.evidence_terms.length);
+  if (!required.length) return 0;
+  const source = primaryOnly
+    ? `${item.full_name || ''} ${item.description || ''} ${(item.topics || []).join(' ')}`
+    : `${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`;
+  return required.filter(check=>capabilityEvidenceSupportedInText(source,[check])).length;
+}
+
+function minimumCapabilityCoverage(requiredCount) {
+  if (requiredCount <= 1) return 1;
+  if (requiredCount === 2) return .5;
+  return .4;
+}
+
+function primaryRequestChecks(input,checks) {
+  if (clean(input,220).length > 24) return [];
+  const request = meaningUnits(input);
+  const scored = (Array.isArray(checks) ? checks : []).map(check=>({check,score:[...meaningUnits(check?.name || '')].filter(unit=>request.has(unit)).length}));
+  const best = Math.max(0,...scored.map(entry=>entry.score));
+  return best >= 2 ? scored.filter(entry=>entry.score === best).map(entry=>entry.check) : [];
+}
+
 function capabilityEvidenceSupportedInText(sourceText,checks) {
   const required = (Array.isArray(checks) ? checks : []).filter(check=>Array.isArray(check?.evidence_terms) && check.evidence_terms.length);
   if (!required.length) return true;
-  const sourceTokens = new Set([...tokenSet(sourceText)].map(stemToken));
-  return required.every(check=>check.evidence_terms.some(term=>{
+  const sourceTokens = [...String(sourceText || '').toLowerCase().replace(/[-_/]+/g,' ').matchAll(/[a-z0-9][a-z0-9.+#]{1,}|[㐀-鿿]{2,8}/gu)]
+    .map(match=>stemToken(match[0].replace(/\.+$/,'')));
+  return required.every(check=>{
+    const terms = check.evidence_terms;
+    const specific = terms.filter(term=>tokenSet(term).size >= 2);
+    const evidenceTerms = specific.length >= 2 ? specific : terms;
+    return evidenceTerms.some(term=>{
     const tokens = [...tokenSet(term)].map(stemToken);
     if (!tokens.length) return false;
-    const matched = tokens.filter(token=>sourceTokens.has(token)).length;
-    return matched >= Math.max(1,Math.ceil(tokens.length * .66));
-  }));
+    if (tokens.length === 1) return sourceTokens.includes(tokens[0]);
+    const positions = tokens.map(token=>sourceTokens.flatMap((value,index)=>value === token ? [index] : []));
+    if (positions.some(values=>!values.length)) return false;
+    const maxWindow = Math.max(8,tokens.length * 4);
+    return positions[0].some(anchor=>positions.every(values=>values.some(index=>Math.abs(index - anchor) <= maxWindow)));
+    });
+  });
 }
 
 function primaryCapabilityEvidenceSupported(item,checks) {
@@ -283,14 +333,14 @@ function quoteMatchesCheck(quote,check) {
   });
 }
 
-function capabilityClaimsSupported(item,requiredValues,claims) {
+function supportedCapabilityClaims(item,requiredValues,claims) {
   const required = (Array.isArray(requiredValues) ? requiredValues : []).map(value=>typeof value === 'string' ? {name:value,evidence_terms:[]} : value).filter(value=>value?.name).slice(0,8);
-  if (!required.length) return true;
+  if (!required.length) return [];
   const entries = (Array.isArray(claims) ? claims : []).map(claim=>({
     capability:clean(claim?.capability,100).toLowerCase(),
     quote:clean(claim?.evidence_quote ?? claim?.quote,220)
   })).filter(claim=>claim.capability && claim.quote);
-  return required.every((check,index)=>{
+  return required.filter((check,index)=>{
     const name = clean(check.name,100).toLowerCase();
     const nameTokens = tokenSet(name);
     const claim = entries.find(entry=>entry.capability === name) || entries.find(entry=>{
@@ -301,12 +351,18 @@ function capabilityClaimsSupported(item,requiredValues,claims) {
   });
 }
 
+function capabilityClaimsSupported(item,requiredValues,claims) {
+  const required = (Array.isArray(requiredValues) ? requiredValues : []).map(value=>typeof value === 'string' ? {name:value,evidence_terms:[]} : value).filter(value=>value?.name).slice(0,8);
+  if (!required.length) return true;
+  return supportedCapabilityClaims(item,required,claims).length === required.length;
+}
+
 function wantsCollection(plan,input = '') {
   return /合集|列表|目录|资源|collection|curated list|awesome list|directory/i.test(`${input} ${plan?.intent || ''} ${plan?.goal || ''}`);
 }
 
 function isCollectionCandidate(item) {
-  return /^awesome[-_]/i.test(item.name || '') || /curated (?:list|collection)|awesome list|collection of (?:tools|projects|resources)|resources? list/i.test(`${item.description || ''} ${String(item.readme_excerpt || '').slice(0,500)}`);
+  return /^awesome[-_]/i.test(item.name || '') || /^set of\b/i.test(item.description || '') || /curated (?:list|collection)|awesome list|collection of (?:tools|projects|resources)|resources? list/i.test(`${item.description || ''} ${String(item.readme_excerpt || '').slice(0,500)}`);
 }
 
 function wantsInstructional(plan,input = '') {
@@ -317,11 +373,11 @@ function isInstructionalCandidate(item) {
   return /(?:^|[-_])(course|tutorial|workshop|learning|learn|examples?|starter[-_]?kit)(?:$|[-_])/i.test(item.name || '') || /\b(?:course|tutorial|workshop|learning resource|educational content|step-by-step guide)\b/i.test(item.description || '');
 }
 
-function fallbackRank(plan,items) {
+function fallbackRank(plan,items,options = {}) {
   const needTokens = tokenSet([plan.goal,plan.intent,...plan.core_capabilities,...plan.constraints,...plan.queries].join(' '));
   const queryTokenSets = plan.queries.map(tokenSet).filter(tokens=>tokens.size);
   return items.filter(item=>
-    primaryCapabilityEvidenceSupported(item,plan.capability_checks) &&
+    (options.allowReadmeEvidence ? capabilityEvidenceSupported(item,plan.capability_checks) : primaryCapabilityEvidenceSupported(item,plan.capability_checks)) &&
     (wantsCollection(plan) || !isCollectionCandidate(item)) &&
     (wantsInstructional(plan) || !isInstructionalCandidate(item))
   ).map(item=>{
@@ -349,7 +405,7 @@ function fallbackRank(plan,items) {
     const relevance = Math.max(0,Math.min(92,32 + bestPrimaryCoverage * 40 + bestQueryCoverage * 20 + primaryCoverage * 15 + overallCoverage * 8 - collectionPenalty));
     const quality = metadataQuality(item);
     const rank = relevance * .72 + quality * .12 + activityScore(item) * .08 + popularityScore(item) * .08;
-    const {readme_excerpt,...repo} = item;
+    const {readme_excerpt,_search_query_index,_search_rank,...repo} = item;
     const original = clean(item.description,150);
     const chinese = /[㐀-鿿]/.test(original);
     return {...repo,relevance_score:relevance,quality_score:quality,rank_score:rank,assessment_mode:'fallback',ai_title:item.name,ai_summary:chinese ? original : (original ? `仓库原始说明：${original}` : '该候选项目缺少可核验的仓库简介，请进入 README 确认具体能力。'),ai_bullets:[]};
@@ -357,38 +413,67 @@ function fallbackRank(plan,items) {
 }
 
 async function rankAndDescribe(req,input,plan,items) {
+  const required = (Array.isArray(plan.capability_checks) ? plan.capability_checks : []).filter(check=>Array.isArray(check?.evidence_terms) && check.evidence_terms.length);
+  const primaryChecks = primaryRequestChecks(input,required);
   const eligible = items.filter(item=>
-    capabilityEvidenceSupported(item,plan.capability_checks) &&
     (wantsCollection(plan,input) || !isCollectionCandidate(item)) &&
     (wantsInstructional(plan,input) || !isInstructionalCandidate(item))
   );
   if (!eligible.length) return [];
-  const candidates = eligible.map(item=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,forks:item.forks_count,homepage:item.homepage,pushed_at:item.pushed_at,readme_excerpt:clean(item.readme_excerpt,1400)}));
-  let result;
+  const scored = eligible.map(item=>({
+    item,
+    matched:required.length ? capabilityMatchCount(item,required) : 1,
+    direct:required.length ? capabilityMatchCount(item,required,true) : 1
+  })).sort((a,b)=>b.direct-a.direct || b.matched-a.matched || Number(a.item._search_query_index ?? 99)-Number(b.item._search_query_index ?? 99) || Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || Number(b.item.stargazers_count || 0)-Number(a.item.stargazers_count || 0));
+  const evidenced = scored.filter(entry=>entry.matched > 0);
+  const pool = (evidenced.length >= 6 ? evidenced : [...evidenced,...scored.filter(entry=>entry.matched === 0)]).slice(0,6);
   try {
-    result = await askModel(req,[
-      {role:'system',content:'你负责按用户真实任务筛选和排序 GitHub 仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","relevant":true,"relevance_score":0,"evidence_score":0,"quality_score":0,"title":"中文标题","summary":"中文说明","bullets":["能力证据"],"evidence_quotes":["从 Description、Topics 或 README 原样复制的短句"],"capability_evidence":[{"capability":"与 core_capabilities 完全相同的名称","evidence_quote":"直接证明该项目提供此能力的原文"}]}]}。只返回真正相关且 relevance_score>=60 的项目，不要为不相关候选返回占位项；full_name 必须来自输入且不得修改。先直接核对用户原始 request 中的每一项明确要求，即使 interpretation 遗漏了某项，也必须以原始 request 为准；只完成其中一部分的项目不能作为完整匹配返回。每个入选项目必须为每一项 core_capabilities 返回一条 capability_evidence，capability 名称必须与输入完全一致，evidence_quote 必须逐字复制资料原文并直接证明项目本身提供这项能力。教程、课程、资源合集或示例仅仅提到某项能力，不等于项目提供可使用的解决方案；除非用户明确要教程或合集，否则不要入选。每个入选项目还必须给出 1-3 条 evidence_quotes，逐字复制输入资料中的原文、不得翻译或改写，并直接支持 summary 中的全部能力判断。缺少任一关键能力的明确证据就不要返回该项目；相邻能力不能替代用户要求，例如规划、测试或代码审查不能证明具备调用链追踪。第一优先级是核心需求匹配：项目的主要输入、输出和能力必须真正帮助完成用户目标，仅有相邻关键词不算匹配。relevance_score 表示需求匹配程度；evidence_score 表示资料对关键能力的证据充分度；quality_score 表示文档、维护、可体验性和项目完成度。Star 与活跃度只能辅助排序，不能掩盖不相关。title 要直接说明项目解决的问题或提供的能力；summary 用具体自然的中文说明实际问题、解决方案和值得关注的新意，不堆术语。不得声称资料没有明确提供的功能。对技术项目可以解释可能带来的产品价值，但必须使用“可用于”“可能帮助”等措辞区分推测与事实。bullets 最多 2 条，只写资料可核验的能力。'},
-      {role:'user',content:JSON.stringify({request:input,interpretation:{goal:plan.goal,core_capabilities:plan.core_capabilities,capability_checks:plan.capability_checks,constraints:plan.constraints},candidates})}
-    ],4800);
-  } catch {
-    return fallbackRank(plan,eligible);
-  }
-  const assessed = new Map();
-  for (const item of Array.isArray(result.items) ? result.items : []) assessed.set(String(item.full_name || '').toLowerCase(),item);
-  return eligible.flatMap(item=>{
-    const decision = assessed.get(String(item.full_name || '').toLowerCase());
-    const relevance = Math.max(0,Math.min(100,Number(decision?.relevance_score || 0)));
-    const evidence = Math.max(0,Math.min(100,Number(decision?.evidence_score || 0)));
-    const quality = Math.max(0,Math.min(100,Number(decision?.quality_score || metadataQuality(item))));
-    const evidenceQuotes = unique(Array.isArray(decision?.evidence_quotes) ? decision.evidence_quotes : [],3);
-    const capabilityEvidence = Array.isArray(decision?.capability_evidence) ? decision.capability_evidence : [];
-    const fallbackEvidence = plan.mode !== 'fallback' || requestEvidenceSupported(input,evidenceQuotes);
-    const requiredChecks = Array.isArray(plan.capability_checks) && plan.capability_checks.length ? plan.capability_checks : plan.core_capabilities;
-    if (!decision || decision.relevant === false || relevance < 60 || evidence < 35 || !evidenceSupported(item,evidenceQuotes) || !capabilityClaimsSupported(item,requiredChecks,capabilityEvidence) || !fallbackEvidence) return [];
-    const rank = relevance * .72 + evidence * .12 + quality * .08 + activityScore(item) * .04 + popularityScore(item) * .04;
-    const {readme_excerpt,...repo} = item;
-    return [{...repo,relevance_score:relevance,evidence_score:evidence,quality_score:quality,rank_score:rank,assessment_mode:'ai',ai_title:clean(decision.title,60) || item.name,ai_summary:clean(decision.summary,180),ai_bullets:unique(Array.isArray(decision.bullets) ? decision.bullets : [],2),evidence_quotes:evidenceQuotes}];
-  }).sort((a,b)=>b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,16);
+    const result = await askModel(req,[
+      {role:'system',content:'你是严格的 GitHub 项目研究员，只输出 JSON：{"items":[{"full_name":"owner/repo","keep":true,"fit_score":0,"title":"中文标题","summary":"适合原因","capability_evidence":[{"capability":"必须能力原名","evidence_quote":"候选资料逐字原文"}],"strengths":["已证明优势"],"limitations":["缺口或未验证项"]}]}。逐项核对输入、输出、必须能力和限制；完整方案优先，部分组件可保留但必须写清缺口。逐字证据不得改写。关键词偶然出现、相邻能力、教程或资源列表 keep=false。主观体验没有试听或实测时必须写“尚未试听/实测，不能保证”。'},
+      {role:'user',content:JSON.stringify({request:input,goal:plan.goal,required_capabilities:required.map(check=>check.name),constraints:plan.constraints,candidates:pool.map(({item})=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,readme_excerpt:clean(item.readme_excerpt,700)}))})}
+    ],900);
+    const resultItems = result?.items ?? result?.projects ?? result?.results ?? result?.recommendations ?? result?.candidates;
+    const decisions = new Map((Array.isArray(resultItems) ? resultItems : []).map(item=>[String((item?.full_name ?? item?.repository ?? item?.repo ?? item?.project) || '').toLowerCase(),item]));
+    const evaluated = [];
+    for (const {item,matched} of pool) {
+      const decision = decisions.get(String(item.full_name || '').toLowerCase());
+      if (!decision || decision.keep === false) continue;
+      const claims = Array.isArray(decision.capability_evidence) ? decision.capability_evidence : Array.isArray(decision.evidence) ? decision.evidence : [];
+      const supported = supportedCapabilityClaims(item,required,claims);
+      if (required.length && !supported.length) continue;
+      const validClaims = claims.filter(claim=>claim?.evidence_quote && evidenceSupported(item,[claim.evidence_quote]));
+      const strengths = unique(decision.strengths,3);
+      const limitations = unique(decision.limitations,3);
+      const rawFit = Number(decision.fit_score) || 0;
+      const fit = Math.max(0,Math.min(100,rawFit > 0 && rawFit <= 1 ? rawFit * 100 : rawFit));
+      const coverage = required.length ? supported.length / required.length : 1;
+      const primarySatisfied = !primaryChecks.length || primaryChecks.some(check=>supported.includes(check));
+      if (!primarySatisfied || coverage < minimumCapabilityCoverage(required.length)) continue;
+      const {readme_excerpt,_search_query_index,_search_rank,...repo} = item;
+      const summary = clean(decision.summary,170) || clean(item.description,150);
+      const gap = limitations[0] ? `不足：${limitations[0]}` : '';
+      evaluated.push({...repo,fit_score:fit,capability_coverage:coverage,relevance_score:Math.round((fit * .7 + coverage * 30) * 10) / 10,rank_score:fit * .68 + coverage * 24 + popularityScore(item) * .08,assessment_mode:'ai_evaluated',ai_title:clean(decision.title,60) || item.name,ai_summary:clean([summary,gap].filter(Boolean).join('；'),220),ai_bullets:strengths,ai_limitations:limitations,ai_evidence:validClaims.map(claim=>clean(claim.evidence_quote,220)).slice(0,4),matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched});
+    }
+    if (evaluated.length) return evaluated.sort((a,b)=>b.capability_coverage-a.capability_coverage || b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,8);
+  } catch {}
+  const partial = pool.filter(entry=>entry.matched > 0).map(({item,matched})=>{
+    const supported = required.filter(check=>capabilityEvidenceSupportedInText(`${item.description || ''} ${(item.topics || []).join(' ')} ${item.readme_excerpt || ''}`,[check]));
+    const missing = required.filter(check=>!supported.includes(check)).map(check=>check.name);
+    const coverage = required.length ? supported.length / required.length : 1;
+    const primarySatisfied = !primaryChecks.length || primaryChecks.some(check=>supported.includes(check));
+    if (!primarySatisfied || coverage < minimumCapabilityCoverage(required.length)) return null;
+    const {readme_excerpt,_search_query_index,_search_rank,...repo} = item;
+    const queryPriority = Math.max(0,100 - Number(item._search_query_index ?? 6) * 15 - Number(item._search_rank ?? 20) * 2);
+    const evidenceLimits = [
+      ...(missing.length ? [`尚未核验：${missing.join('、')}`] : []),
+      '当前仅依据仓库资料核对相关能力，尚未验证这些能力已组成可直接使用的完整工作流',
+      '自然度、音质和实际使用体验尚未试听或实测，不能保证'
+    ];
+    return {...repo,fit_score:Math.round(coverage * 100),capability_coverage:coverage,relevance_score:Math.round(coverage * 1000) / 10,rank_score:coverage * 80 + queryPriority * .2,assessment_mode:'evidence_fallback',ai_title:item.name,ai_summary:clean([`仓库资料命中：${supported.map(check=>check.name).join('、') || '与需求相关的能力'}`,missing.length ? `未核验：${missing.join('、')}` : '',item.description || ''].filter(Boolean).join('；'),220),ai_bullets:supported.map(check=>`README 或仓库简介包含与“${check.name}”相关的证据`).slice(0,3),ai_limitations:evidenceLimits,ai_evidence:item.description ? [clean(item.description,220)] : [],matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched};
+  }).filter(Boolean).sort((a,b)=>b.capability_coverage-a.capability_coverage || b.rank_score-a.rank_score).slice(0,6);
+  if (partial.length) return partial;
+  const direct = eligible.filter(item=>primaryCapabilityEvidenceSupported(item,required));
+  return fallbackRank(plan,direct.length ? direct : eligible,{allowReadmeEvidence:!direct.length});
 }
 
 async function describeItems(req,items) {
@@ -430,17 +515,23 @@ module.exports = async function handler(req,res) {
     }
 
     const plan = await planSearch(req,input);
+    if (plan.mode !== 'ai') return res.status(503).json({error:'ai_planning_unavailable',detail:plan.aiFallbackReason || 'planning_failed'});
     const batches = await Promise.allSettled(plan.queries.map(query=>githubSearch(query,token)));
     const all = new Map();
     const diversified = new Map();
     const fulfilled = batches.filter(batch=>batch.status === 'fulfilled').map(batch=>batch.value);
     for (const items of fulfilled) for (const item of items) if (item?.full_name && !item.archived && !item.fork) all.set(item.full_name.toLowerCase(),shape(item));
-    for (let rank = 0; rank < 10 && diversified.size < MAX_CANDIDATES; rank++) {
-      for (const items of fulfilled) {
+    for (const rank of DIVERSIFIED_RANKS) {
+      for (const [queryIndex,items] of fulfilled.entries()) {
         const item = items[rank];
-        if (item?.full_name && !item.archived && !item.fork) diversified.set(item.full_name.toLowerCase(),shape(item));
+        if (item?.full_name && !item.archived && !item.fork) {
+          const key = item.full_name.toLowerCase();
+          const previous = diversified.get(key);
+          diversified.set(key,{...shape(item),_search_query_index:Math.min(queryIndex,previous?._search_query_index ?? queryIndex),_search_rank:Math.min(rank,previous?._search_rank ?? rank)});
+        }
         if (diversified.size >= MAX_CANDIDATES) break;
       }
+      if (diversified.size >= MAX_CANDIDATES) break;
     }
     const remainder = [...all.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
     for (const item of remainder) if (diversified.size < MAX_CANDIDATES) diversified.set(item.full_name.toLowerCase(),item);
@@ -448,7 +539,7 @@ module.exports = async function handler(req,res) {
     if (!candidates.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     const hydrated = await withReadmes(candidates,plan.capability_checks);
     const eligibleCount = hydrated.filter(item=>
-      capabilityEvidenceSupported(item,plan.capability_checks) &&
+      (!plan.capability_checks.length || capabilityMatchCount(item,plan.capability_checks) > 0) &&
       (wantsCollection(plan,input) || !isCollectionCandidate(item)) &&
       (wantsInstructional(plan,input) || !isInstructionalCandidate(item))
     ).length;
@@ -459,4 +550,5 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,complementaryQueries,evidenceCoverage,evidenceSupported,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,popularityScore,primaryCapabilityEvidenceSupported,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,tokenSet,unique,wantsCollection,wantsInstructional};
+module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,complementaryQueries,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeGithubQuery,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional};
+
