@@ -65,9 +65,47 @@ test('检索计划只使用模型生成的英文查询，不把中文或拼接�
   assert.deepEqual(queries,['LLM agent reliability benchmark']);
 });
 
+test('完整产品、用户语言和组件检索分层执行，完整产品始终优先',()=>{
+  const plan = search.normalizeAIPlan({
+    intent:'把英文访谈转成自然中文多人音频',
+    goal:'输出可收听的中文多人对话',
+    core_capabilities:[{name:'音频转写',evidence_terms:['audio transcription','音频转写']}],
+    constraints:['自然度待试听'],
+    workflow_queries:['interview dubbing','speech dubbing transcription'],
+    localized_queries:['访谈 翻译 配音'],
+    component_queries:['speaker diarization','multi speaker TTS','voice cloning']
+  },'英文访谈转中文多人音频');
+  assert.deepEqual(plan.queries,[
+    'interview dubbing','speech dubbing transcription','访谈 翻译 配音',
+    'speaker diarization','multi speaker TTS'
+  ]);
+  assert.deepEqual(plan.query_specs.map(spec=>spec.kind),['workflow','workflow','localized','component','component']);
+});
+
+test('中文仓库说明可以作为能力证据，不要求作者必须写英文术语',()=>{
+  const source='开箱即用的访谈翻译工具，可将英文录音转写、翻译、配音并合成为中文多人音频。';
+  assert.equal(search.capabilityEvidenceSupportedInText(source,[
+    {name:'录音转写',evidence_terms:['audio transcription','录音转写']},
+    {name:'中文配音',evidence_terms:['Chinese dubbing','中文多人音频']}
+  ]),true);
+});
+
+test('候选采样保留每条检索的长尾产品，不按 Star 全局挤掉',()=>{
+  const make=(query,rank,stars=1)=>({
+    full_name:`demo/q${query}-r${rank}`,name:`q${query}-r${rank}`,description:'',topics:[],
+    stargazers_count:stars,forks_count:0,archived:false,fork:false,default_branch:'main'
+  });
+  const results=Array.from({length:5},(_,query)=>Array.from({length:50},(_,rank)=>make(query,rank,rank === 0 ? 100000 : 1)));
+  const candidates=search.collectDiversifiedCandidates(results);
+  assert.equal(candidates.length,42);
+  assert.ok(candidates.some(item=>item.full_name === 'demo/q0-r49'));
+  assert.ok(candidates.some(item=>item.full_name === 'demo/q4-r49'));
+});
+
 test('GitHub 召回去掉会把查询锁死的描述词，保留核心产品类别',()=>{
   assert.equal(search.normalizeGithubQuery('end-to-end podcast dubbing'),'podcast dubbing');
   assert.equal(search.normalizeGithubQuery('natural expressive TTS Chinese'),'TTS Chinese');
+  assert.equal(search.normalizeGithubQuery('automated podcast dubbing system'),'podcast dubbing');
   assert.equal(search.normalizeGithubQuery('menu translation'),'menu translation');
 });
 

@@ -1,11 +1,12 @@
 const {getSession,refreshSession,setSession} = require('./_lib/session');
 
 const GITHUB_API = 'https://api.github.com';
-// Seven diversified ranks across five complementary searches need 35 slots.
-// Keeping this at 30 silently dropped the deepest long-tail rank, where
-// focused low-star products such as AudioSmith often appear.
-const MAX_CANDIDATES = 35;
-const DIVERSIFIED_RANKS = [0,1,2,4,8,10,14];
+// Keep the first results and the long tail from every complementary search.
+// This prevents popular infrastructure from crowding out focused products.
+const MAX_CANDIDATES = 42;
+const DIVERSIFIED_RANKS = [0,1,2,5,12,24,49];
+const MAX_QUERY_COUNT = 5;
+const RANKING_POOL_SIZE = 10;
 
 function jsonFrom(text) {
   const source = String(text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
@@ -65,8 +66,53 @@ function focusedTerm(value) {
   return tokens.slice(-2).join(' ');
 }
 
+function planQuerySpecs(plan) {
+  const workflow = unique(
+    plan?.workflow_queries ?? plan?.workflowQueries ?? plan?.product_queries ?? plan?.productQueries,
+    2
+  );
+  const localized = unique(
+    plan?.localized_queries ?? plan?.localizedQueries ?? plan?.native_queries ?? plan?.nativeQueries,
+    1
+  );
+  const components = unique(
+    plan?.component_queries ?? plan?.componentQueries ?? plan?.queries ?? plan?.search_queries ?? plan?.searchQueries ?? plan?.github_queries ?? plan?.githubQueries,
+    2
+  );
+  const source = workflow.length || localized.length
+    ? [
+        ...workflow.map(query=>({query,kind:'workflow'})),
+        ...localized.map(query=>({query,kind:'localized'})),
+        ...components.map(query=>({query,kind:'component'}))
+      ]
+    : components.map(query=>({query,kind:'general'}));
+  const seen = new Set();
+  return source.filter(spec=>{
+    const key = spec.query.toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0,MAX_QUERY_COUNT);
+}
+
 function complementaryQueries(plan) {
-  return unique(Array.isArray(plan?.queries) ? plan.queries : [],7);
+  return planQuerySpecs(plan).map(spec=>spec.query);
+}
+
+function normalizeAIPlan(plan,input) {
+  const query_specs = planQuerySpecs(plan);
+  if (!query_specs.length) throw new Error('empty_queries');
+  const checks = expandComplexEvidence(capabilityChecks(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves));
+  return {
+    intent:clean(plan.intent) || input,
+    goal:clean(plan.goal) || clean(plan.intent) || input,
+    core_capabilities:checks.map(item=>item.name),
+    capability_checks:checks,
+    constraints:unique(plan.constraints ?? plan.requirements ?? plan.limitations,8),
+    queries:query_specs.map(spec=>spec.query),
+    query_specs,
+    mode:'ai'
+  };
 }
 
 function fallbackPlan(input) {
@@ -91,23 +137,10 @@ function fallbackPlan(input) {
 async function planSearch(req,input) {
   try {
     const plan = await askModel(req,[
-      {role:'system',content:'把用户需求转换成 GitHub 仓库检索计划，只输出一个 JSON 对象，字段必须完全如下：{"intent":"中文意图","goal":"最终任务","core_capabilities":[{"name":"必须能力","evidence_terms":["2-6个英文证据短语"]}],"constraints":["明确限制或主观质量要求"],"queries":["4-6个英文 GitHub 搜索短语"]}。规则：1. 用户原话中的输入、转换步骤、输出形态和必须条件不能遗漏，每项必须能力单列；音频、视频、图片、文本等媒介必须从输入贯穿到输出，不能把“生成中文播客”降成只生成中文文本。2. 复杂转换要拆成真实项目会实现的关键环节，例如识别输入、保留结构、内容转换、生成目标输出；但不添加用户没说的平台或技术栈。3. 主观要求放 constraints，例如自然、非 AI 腔；同时把 README 可核验的相关能力作为搜索线索，但不得把这些线索当成已经实测。4. evidence_terms 使用真实仓库常见的英文类别、实现术语和同义词，不只直译用户原话；对象与动作不可分时必须同时保留，menu translation 不能写成宽泛的 i18n。5. queries 必须互补：至少包含一条端到端产品类别、一条输入处理类别、一条目标输出类别、一条更宽但能处理相同媒介的相邻产品类别。涉及音视频跨语言转换时，应按需求覆盖 dubbing、speech translation、speaker diarization、voice cloning、multi-speaker TTS 等真实仓库术语；不涉及时不得硬加。每条 1-5 个高辨识度英文概念，不输出解释文字。'},
+      {role:'system',content:'把用户需求转换成 GitHub 仓库检索计划，只输出一个 JSON 对象，字段必须完全如下：{"intent":"中文意图","goal":"最终任务","core_capabilities":[{"name":"必须能力","evidence_terms":["2-6个可在仓库原文中核验的中英文短语"]}],"constraints":["明确限制或主观质量要求"],"workflow_queries":["2条完整产品检索词"],"localized_queries":["1条用户语言检索词"],"component_queries":["2条补充组件检索词"]}。规则：1. 用户原话中的输入、整体转换、输出形态和必须条件不能遗漏；媒介必须从输入贯穿到输出，不能把音频输出降成文本。2. workflow_queries 优先召回能直接完成主要任务的产品：第一条保留用户对象与整体动作；第二条使用完整产品通常同时具备的2-3项高辨识度能力，不加 AI、system、tool、platform、pipeline 等泛词。3. localized_queries 使用用户主要语言和仓库作者可能写在名称或简介中的最短产品词组；用户用英文时可为空数组。4. component_queries 只用于补充缺失环节，不能全部写成底层模型或单一步骤。每条查询2-4个概念，总查询不超过5条。5. 每项 evidence_terms 同时覆盖真实仓库常见的英文术语；当用户不是英文提问时，再加入1-2个用户语言中的仓库常用短语。对象与动作不可分时必须同时保留，不能用宽泛 i18n 冒充菜单翻译。6. 主观要求放 constraints；自然、音质、非 AI 腔只能作为待试听验证项，不得当成已证明能力。7. 只加入用户需求确实涉及的术语，不得套用固定领域关键词。'},
       {role:'user',content:JSON.stringify({request:input})}
     ],1200);
-    const queries = unique(plan.queries ?? plan.search_queries ?? plan.searchQueries ?? plan.github_queries ?? plan.githubQueries ?? plan.search_strategies ?? plan.searchStrategies ?? plan.strategies,5);
-    if (!queries.length) throw new Error('empty_queries');
-    const checks = expandComplexEvidence(capabilityChecks(plan.core_capabilities ?? plan.capabilities ?? plan.must_haves));
-    const shaped = {
-      intent:clean(plan.intent) || input,
-      goal:clean(plan.goal) || clean(plan.intent) || input,
-      core_capabilities:checks.map(item=>item.name),
-      capability_checks:checks,
-      constraints:unique(plan.constraints ?? plan.requirements ?? plan.limitations,8),
-      queries,
-      mode:'ai'
-    };
-    shaped.queries = complementaryQueries(shaped);
-    return shaped;
+    return normalizeAIPlan(plan,input);
   } catch (error) {
     return {...fallbackPlan(input),aiFallbackReason:String(error?.message || 'ai_unavailable').slice(0,80)};
   }
@@ -124,7 +157,7 @@ function shape(item) {
 
 function normalizeGithubQuery(query) {
   const source = clean(query,220).replace(/\bsite:github\.com\b/ig,' ').replace(/\bgithub\b/ig,' ');
-  const simplified = source.replace(/\b(?:end[- ]to[- ]end|automated|automatic|natural|expressive|advanced|complete|full|tool|platform|pipeline)\b/ig,' ').replace(/\s+/g,' ').trim();
+  const simplified = source.replace(/\b(?:end[- ]to[- ]end|automated|automatic|natural|expressive|advanced|complete|full|tool|platform|pipeline|system|solution|application)\b/ig,' ').replace(/\s+/g,' ').trim();
   return simplified.split(/\s+/).filter(Boolean).length >= 2 ? simplified : source.replace(/\s+/g,' ').trim();
 }
 
@@ -132,11 +165,47 @@ async function githubSearch(query,token) {
   const cleaned = normalizeGithubQuery(query);
   const scope = /\bin:/.test(cleaned) ? '' : ' in:name,description,readme,topics';
   const q = `${cleaned}${scope} archived:false fork:false`;
-  const params = new URLSearchParams({q,per_page:'35'});
+  const params = new URLSearchParams({q,per_page:'50'});
   const response = await fetch(`${GITHUB_API}/search/repositories?${params}`,{headers:githubHeaders(token),signal:AbortSignal.timeout(12000)});
   if (!response.ok) throw new Error('github_' + response.status);
   const data = await response.json();
   return Array.isArray(data.items) ? data.items : [];
+}
+
+function collectDiversifiedCandidates(results,maxCandidates = MAX_CANDIDATES) {
+  const diversified = new Map();
+  const fulfilled = Array.isArray(results) ? results : [];
+  for (const rank of DIVERSIFIED_RANKS) {
+    for (const [queryIndex,items] of fulfilled.entries()) {
+      const item = Array.isArray(items) ? items[rank] : null;
+      if (item?.full_name && !item.archived && !item.fork) {
+        const key = item.full_name.toLowerCase();
+        const previous = diversified.get(key);
+        diversified.set(key,{
+          ...shape(item),
+          _search_query_index:Math.min(queryIndex,previous?._search_query_index ?? queryIndex),
+          _search_rank:Math.min(rank,previous?._search_rank ?? rank)
+        });
+      }
+      if (diversified.size >= maxCandidates) return [...diversified.values()];
+    }
+  }
+  // If a search returned fewer than the sampled ranks, fill remaining slots in
+  // query order instead of globally by stars.
+  for (let rank = 0; diversified.size < maxCandidates; rank++) {
+    let found = false;
+    for (const [queryIndex,items] of fulfilled.entries()) {
+      const item = Array.isArray(items) ? items[rank] : null;
+      if (!item) continue;
+      found = true;
+      if (!item.full_name || item.archived || item.fork) continue;
+      const key = item.full_name.toLowerCase();
+      if (!diversified.has(key)) diversified.set(key,{...shape(item),_search_query_index:queryIndex,_search_rank:rank});
+      if (diversified.size >= maxCandidates) break;
+    }
+    if (!found) break;
+  }
+  return [...diversified.values()];
 }
 
 function markdownText(value) {
@@ -257,6 +326,11 @@ function capabilityEvidenceSupportedInText(sourceText,checks) {
     const specific = terms.filter(term=>tokenSet(term).size >= 2);
     const evidenceTerms = specific.length >= 2 ? specific : terms;
     return evidenceTerms.some(term=>{
+    const compactTerm = String(term || '').replace(/[^\p{L}\p{N}]+/gu,'').toLowerCase();
+    if (/[㐀-鿿]/u.test(compactTerm)) {
+      const compactSource = String(sourceText || '').replace(/[^\p{L}\p{N}]+/gu,'').toLowerCase();
+      if (compactTerm.length >= 2 && compactSource.includes(compactTerm)) return true;
+    }
     const tokens = [...tokenSet(term)].map(stemToken);
     if (!tokens.length) return false;
     if (tokens.length === 1) return sourceTokens.includes(tokens[0]);
@@ -426,12 +500,12 @@ async function rankAndDescribe(req,input,plan,items) {
     direct:required.length ? capabilityMatchCount(item,required,true) : 1
   })).sort((a,b)=>b.direct-a.direct || b.matched-a.matched || Number(a.item._search_query_index ?? 99)-Number(b.item._search_query_index ?? 99) || Number(a.item._search_rank ?? 99)-Number(b.item._search_rank ?? 99) || Number(b.item.stargazers_count || 0)-Number(a.item.stargazers_count || 0));
   const evidenced = scored.filter(entry=>entry.matched > 0);
-  const pool = (evidenced.length >= 6 ? evidenced : [...evidenced,...scored.filter(entry=>entry.matched === 0)]).slice(0,6);
+  const pool = (evidenced.length >= RANKING_POOL_SIZE ? evidenced : [...evidenced,...scored.filter(entry=>entry.matched === 0)]).slice(0,RANKING_POOL_SIZE);
   try {
     const result = await askModel(req,[
       {role:'system',content:'你是严格的 GitHub 项目研究员，只输出 JSON：{"items":[{"full_name":"owner/repo","keep":true,"fit_score":0,"title":"中文标题","summary":"适合原因","capability_evidence":[{"capability":"必须能力原名","evidence_quote":"候选资料逐字原文"}],"strengths":["已证明优势"],"limitations":["缺口或未验证项"]}]}。逐项核对输入、输出、必须能力和限制；完整方案优先，部分组件可保留但必须写清缺口。逐字证据不得改写。关键词偶然出现、相邻能力、教程或资源列表 keep=false。主观体验没有试听或实测时必须写“尚未试听/实测，不能保证”。'},
       {role:'user',content:JSON.stringify({request:input,goal:plan.goal,required_capabilities:required.map(check=>check.name),constraints:plan.constraints,candidates:pool.map(({item})=>({full_name:item.full_name,description:item.description,topics:item.topics,stars:item.stargazers_count,readme_excerpt:clean(item.readme_excerpt,700)}))})}
-    ],900);
+    ],1600);
     const resultItems = result?.items ?? result?.projects ?? result?.results ?? result?.recommendations ?? result?.candidates;
     const decisions = new Map((Array.isArray(resultItems) ? resultItems : []).map(item=>[String((item?.full_name ?? item?.repository ?? item?.repo ?? item?.project) || '').toLowerCase(),item]));
     const evaluated = [];
@@ -517,25 +591,8 @@ module.exports = async function handler(req,res) {
     const plan = await planSearch(req,input);
     if (plan.mode !== 'ai') return res.status(503).json({error:'ai_planning_unavailable',detail:plan.aiFallbackReason || 'planning_failed'});
     const batches = await Promise.allSettled(plan.queries.map(query=>githubSearch(query,token)));
-    const all = new Map();
-    const diversified = new Map();
-    const fulfilled = batches.filter(batch=>batch.status === 'fulfilled').map(batch=>batch.value);
-    for (const items of fulfilled) for (const item of items) if (item?.full_name && !item.archived && !item.fork) all.set(item.full_name.toLowerCase(),shape(item));
-    for (const rank of DIVERSIFIED_RANKS) {
-      for (const [queryIndex,items] of fulfilled.entries()) {
-        const item = items[rank];
-        if (item?.full_name && !item.archived && !item.fork) {
-          const key = item.full_name.toLowerCase();
-          const previous = diversified.get(key);
-          diversified.set(key,{...shape(item),_search_query_index:Math.min(queryIndex,previous?._search_query_index ?? queryIndex),_search_rank:Math.min(rank,previous?._search_rank ?? rank)});
-        }
-        if (diversified.size >= MAX_CANDIDATES) break;
-      }
-      if (diversified.size >= MAX_CANDIDATES) break;
-    }
-    const remainder = [...all.values()].sort((a,b)=>Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0));
-    for (const item of remainder) if (diversified.size < MAX_CANDIDATES) diversified.set(item.full_name.toLowerCase(),item);
-    const candidates = [...diversified.values()].slice(0,MAX_CANDIDATES);
+    const searchResults = batches.map(batch=>batch.status === 'fulfilled' ? batch.value : []);
+    const candidates = collectDiversifiedCandidates(searchResults);
     if (!candidates.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     const hydrated = await withReadmes(candidates,plan.capability_checks);
     const eligibleCount = hydrated.filter(item=>
@@ -550,5 +607,5 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,complementaryQueries,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeGithubQuery,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional};
+module.exports._test = {activityScore,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional};
 
