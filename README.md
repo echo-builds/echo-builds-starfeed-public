@@ -2,7 +2,9 @@
 
 **像刷小红书一样逛 GitHub，发现有趣的 AI 开源项目。**
 
-[在线体验](https://echo-builds-starfeed.vercel.app/) · [GitHub 仓库](https://github.com/echo-builds/echo-builds-starfeed-public)
+**正式产品入口（网页与手机）：[立即体验 RepoScroll](https://echo-builds-starfeed.vercel.app/)**
+
+本仓库用于保存源代码、产品说明和部署配置；用户无需前往其他地址体验不同功能。
 
 ## 为什么做这个？
 
@@ -66,7 +68,7 @@ RepoScroll 想做的，就是让发现开源项目像刷内容一样轻松，让
 
 ## 使用与部署
 
-用手机或电脑打开 [RepoScroll](https://echo-builds-starfeed.vercel.app/) 即可体验。手机浏览器支持添加到主屏幕。
+RepoScroll 只有一个正式体验入口：[https://echo-builds-starfeed.vercel.app/](https://echo-builds-starfeed.vercel.app/)。手机和电脑访问的是同一个完整产品，手机浏览器也支持添加到主屏幕。
 
 本地只预览静态页面，可以在仓库目录运行：
 
