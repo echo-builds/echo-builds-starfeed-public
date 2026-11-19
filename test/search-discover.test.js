@@ -120,6 +120,18 @@ test('候选采样保留每条检索的长尾产品，不按 Star 全局挤掉',
   assert.ok(candidates.some(item=>item.full_name === 'demo/q4-r49'));
 });
 
+test('产品检索连续保留前八名，不会漏掉第四名的长尾产品',()=>{
+  const make=(query,rank)=>({
+    full_name:`demo/q${query}-r${rank}`,name:`q${query}-r${rank}`,description:'',topics:[],
+    stargazers_count:1,forks_count:0,archived:false,fork:false,default_branch:'main'
+  });
+  const results=Array.from({length:5},(_,query)=>Array.from({length:50},(_,rank)=>make(query,rank)));
+  const candidates=search.collectDiversifiedCandidates(results,42,3);
+  for (let query=0;query<3;query++) {
+    for (let rank=0;rank<8;rank++) assert.ok(candidates.some(item=>item.full_name === `demo/q${query}-r${rank}`));
+  }
+});
+
 test('完整产品与本地语言检索各有复核席位，不被高分组件挤掉',()=>{
   const entry=(name,query,rank,matched,direct)=>({
     item:{full_name:name,_search_query_index:query,_search_rank:rank,stargazers_count:1},matched,direct

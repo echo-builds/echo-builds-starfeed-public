@@ -209,9 +209,24 @@ async function githubSearch(query,token) {
   return Array.isArray(data.items) ? data.items : [];
 }
 
-function collectDiversifiedCandidates(results,maxCandidates = MAX_CANDIDATES) {
+function collectDiversifiedCandidates(results,maxCandidates = MAX_CANDIDATES,priorityQueryCount = 0) {
   const diversified = new Map();
   const fulfilled = Array.isArray(results) ? results : [];
+  for (let queryIndex = 0; queryIndex < Math.min(priorityQueryCount,fulfilled.length); queryIndex++) {
+    const items = fulfilled[queryIndex];
+    for (let rank = 0; rank < 8; rank++) {
+      const item = Array.isArray(items) ? items[rank] : null;
+      if (!item?.full_name || item.archived || item.fork) continue;
+      const key = item.full_name.toLowerCase();
+      const previous = diversified.get(key);
+      diversified.set(key,{
+        ...shape(item),
+        _search_query_index:Math.min(queryIndex,previous?._search_query_index ?? queryIndex),
+        _search_rank:Math.min(rank,previous?._search_rank ?? rank)
+      });
+      if (diversified.size >= maxCandidates) return [...diversified.values()];
+    }
+  }
   for (const rank of DIVERSIFIED_RANKS) {
     for (const [queryIndex,items] of fulfilled.entries()) {
       const item = Array.isArray(items) ? items[rank] : null;
@@ -645,7 +660,8 @@ module.exports = async function handler(req,res) {
     if (plan.mode !== 'ai') return res.status(503).json({error:'ai_planning_unavailable',detail:plan.aiFallbackReason || 'planning_failed'});
     const batches = await Promise.allSettled(plan.queries.map(query=>githubSearch(query,token)));
     const searchResults = batches.map(batch=>batch.status === 'fulfilled' ? batch.value : []);
-    const candidates = collectDiversifiedCandidates(searchResults);
+    const priorityQueryCount = (plan.query_specs || []).filter(spec=>spec.kind === 'workflow' || spec.kind === 'localized').length;
+    const candidates = collectDiversifiedCandidates(searchResults,MAX_CANDIDATES,priorityQueryCount);
     if (!candidates.length && batches.every(batch=>batch.status === 'rejected')) return res.status(502).json({error:'github_unavailable'});
     const hydrated = await withReadmes(candidates,plan.capability_checks);
     const eligibleCount = hydrated.filter(item=>
