@@ -509,6 +509,7 @@ const state = {
   feedHead:null,
   returnEventId:null,
   restorePending:true,
+  restorePages:0,
   lastFetch:0,
   saved:new Map((Array.isArray(oldSaved) ? oldSaved.filter(validRepo) : []).map(repo => [repoKey(repo),repo])),
   auth:null,
@@ -713,10 +714,15 @@ async function loadDiscover({reset = false} = {}) {
         const additions = incoming.filter(repo=>!currentKeys.has(feedKey(repo))).map(discoveryResult).filter(Boolean).map(card);
         const feed = $('#feed');
         feed.append(...additions);
-        if (masonry) for (const item of additions) masonry.observe(item);
+        for (const item of additions) {
+          if (masonry) masonry.observe(item);
+          const trigger=item.querySelector?.('[data-feed-event]');
+          if (trigger) readingObserver?.observe(trigger);
+        }
         const sentinel = $('#feed-sentinel');
         sentinel.textContent = state.discoveryDone ? '已看完当前收录的高质量项目' : '继续下滑，发现更早收录的项目';
         updateStatus();
+        if (state.restorePending) restoreReadingPosition();
       }
     }
     updateNewProjectsButton();
@@ -1110,9 +1116,20 @@ function updateNewProjectsButton() {
 }
 function restoreReadingPosition() {
   if (!state.restorePending || state.newCount<1 && !state.progress.resume_event_id) return;
-  state.restorePending=false;
   const target=document.querySelector(`[data-feed-event="${Number(state.progress.resume_event_id || 0)}"]`);
-  if (target) requestAnimationFrame(()=>target.scrollIntoView({block:'start'}));
+  if (target) {
+    state.restorePending=false;
+    state.restorePages=0;
+    requestAnimationFrame(()=>target.scrollIntoView({block:'start'}));
+    return;
+  }
+  if (!state.discoveryDone && state.discoveryCursor && state.restorePages<10) {
+    state.restorePages++;
+    setTimeout(()=>loadDiscover(),0);
+    return;
+  }
+  state.restorePending=false;
+  state.restorePages=0;
 }
 function render() {
   const savedView = state.view === 'saved';
@@ -1306,6 +1323,7 @@ async function syncReadingProgress() {
     if (remote.resume_event_id && remoteUpdated>localUpdated) {
       state.progress.resume_event_id=Number(remote.resume_event_id);
       state.restorePending=true;
+      state.restorePages=0;
     }
     saveProgress({latest:state.progress.latest_seen_event_id,resume:state.progress.resume_event_id});
   } catch {}
