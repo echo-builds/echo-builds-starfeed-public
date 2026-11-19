@@ -175,6 +175,12 @@ test('GitHub 召回去掉会把查询锁死的描述词，保留核心产品类�
   assert.equal(search.normalizeGithubQuery('menu translation'),'menu translation');
 });
 
+test('完整产品查主元数据，组件才查 README 全文',()=>{
+  assert.equal(search.githubSearchScope('workflow'),'in:name,description,topics');
+  assert.equal(search.githubSearchScope('localized'),'in:name,description,topics');
+  assert.equal(search.githubSearchScope('component'),'in:name,description,readme,topics');
+});
+
 test('资源链接合集不会作为可运行产品进入推荐',()=>{
   assert.equal(search.isCollectionCandidate({name:'voiceai',description:'Set of notes and links to help people build Voice AI agents'}),true);
   assert.equal(search.isCollectionCandidate({name:'voice-pro',description:'Gradio WebUI for transcription, translation and voice cloning'}),false);

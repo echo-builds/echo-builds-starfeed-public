@@ -198,9 +198,15 @@ function normalizeGithubQuery(query) {
   return simplified.split(/\s+/).filter(Boolean).length >= 2 ? simplified : source.replace(/\s+/g,' ').trim();
 }
 
-async function githubSearch(query,token) {
+function githubSearchScope(kind) {
+  return kind === 'workflow' || kind === 'localized'
+    ? 'in:name,description,topics'
+    : 'in:name,description,readme,topics';
+}
+
+async function githubSearch(query,token,kind = 'general') {
   const cleaned = normalizeGithubQuery(query);
-  const scope = /\bin:/.test(cleaned) ? '' : ' in:name,description,readme,topics';
+  const scope = /\bin:/.test(cleaned) ? '' : ` ${githubSearchScope(kind)}`;
   const q = `${cleaned}${scope} archived:false fork:false`;
   const params = new URLSearchParams({q,per_page:'50'});
   const response = await fetch(`${GITHUB_API}/search/repositories?${params}`,{headers:githubHeaders(token),signal:AbortSignal.timeout(12000)});
@@ -691,7 +697,7 @@ module.exports = async function handler(req,res) {
 
     const plan = await planSearch(req,input);
     if (plan.mode !== 'ai') return res.status(503).json({error:'ai_planning_unavailable',detail:plan.aiFallbackReason || 'planning_failed'});
-    const batches = await Promise.allSettled(plan.queries.map(query=>githubSearch(query,token)));
+    const batches = await Promise.allSettled(plan.queries.map((query,index)=>githubSearch(query,token,plan.query_specs?.[index]?.kind)));
     const searchResults = batches.map(batch=>batch.status === 'fulfilled' ? batch.value : []);
     const priorityQueryCount = (plan.query_specs || []).filter(spec=>spec.kind === 'workflow' || spec.kind === 'localized').length;
     const candidates = collectDiversifiedCandidates(searchResults,MAX_CANDIDATES,priorityQueryCount);
@@ -711,5 +717,5 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,cosineSimilarity,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional,withSemanticScores};
+module.exports._test = {activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,cosineSimilarity,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,githubSearchScope,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional,withSemanticScores};
 
