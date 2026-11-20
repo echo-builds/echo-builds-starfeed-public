@@ -37,7 +37,7 @@ jobs:
           fi
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GITHUB_API_TOKEN: ${{ secrets.FEED_GITHUB_TOKEN }}
+          GITHUB_API_TOKEN: ${{ github.token }}
           FREE_AI_PROVIDER: ${{ vars.FREE_AI_PROVIDER }}
           ENABLE_FREE_GEMINI: ${{ vars.ENABLE_FREE_GEMINI }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
