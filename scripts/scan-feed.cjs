@@ -140,11 +140,15 @@ async function main() {
       const repo=row.payload;
       if (repo?.full_name && !candidateMap.has(row.full_name_key)) candidateMap.set(row.full_name_key,{repo,lane:repo.attention_category || laneFor(repo),existing:true});
     }
+    const publishedKeys=backfillTarget
+      ? new Set((await db`SELECT DISTINCT project_full_name_key FROM feed_events WHERE status='published'`).map(row=>row.project_full_name_key))
+      : new Set();
     const candidates=[];
     const candidateLimit=backfillTarget ? Math.min(500,Math.max(220,Math.ceil(backfillTarget*1.5))) : 48;
     for (const entry of [...candidateMap.values()].filter(({repo})=>!repo.archived&&!repo.fork&&!suspicious(repo)).sort((a,b)=>initialScore(b.repo)-initialScore(a.repo)).slice(0,candidateLimit)) {
       const repo=entry.repo;
       const fullNameKey=keyOf(repo);
+      if (backfillTarget && publishedKeys.has(fullNameKey)) continue;
       const previous=await previousSnapshot(db,fullNameKey);
       await db`INSERT INTO repo_snapshots (project_full_name_key,stars,forks,pushed_at) VALUES (${fullNameKey},${Number(repo.stargazers_count || 0)},${Number(repo.forks_count || 0)},${repo.pushed_at || null})`;
       const hours=previous ? Math.max(1,(Date.now()-Date.parse(previous.observed_at))/3600000) : null;
