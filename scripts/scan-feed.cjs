@@ -260,9 +260,9 @@ async function main() {
       ? await db`
           SELECT p.full_name_key,p.payload FROM projects p
           WHERE EXISTS(SELECT 1 FROM feed_events e WHERE e.project_full_name_key=p.full_name_key AND e.status='published')
-          ORDER BY CASE WHEN COALESCE((p.payload->>'content_pipeline_version')::int,0)<>${CONTENT_PIPELINE_VERSION} THEN 0 ELSE 1 END,
+          ORDER BY CASE WHEN COALESCE(p.payload->>'content_ready','false')='true' THEN 1 ELSE 0 END,
+            CASE WHEN COALESCE((p.payload->>'content_pipeline_version')::int,0)<>${CONTENT_PIPELINE_VERSION} THEN 0 ELSE 1 END,
             CASE WHEN p.payload#>>'{quality_review,status}'='rejected' THEN 0 ELSE 1 END,
-            CASE WHEN COALESCE(p.payload->>'content_ready','false')='true' THEN 1 ELSE 0 END,
             p.last_scanned_at ASC LIMIT ${refreshTarget}`
       : await db`SELECT full_name_key,payload FROM projects ORDER BY last_scanned_at ASC LIMIT 80`;
     for (const row of existing) {
@@ -366,13 +366,24 @@ async function main() {
       if (!title || !coverCopy) continue;
       const fingerprint=sourceFingerprint(item.readme);
       const stored=item.storedPayload || {};
-      const prepared=stored.content_ready===true && stored.readme_source_sha===fingerprint && stored.content_pipeline_version===CONTENT_PIPELINE_VERSION
+      let prepared=stored.content_ready===true && stored.readme_source_sha===fingerprint && stored.content_pipeline_version===CONTENT_PIPELINE_VERSION
         ? {
             content_ready:true,translation_status:stored.translation_status,readme_markdown:stored.readme_markdown,
             content_pipeline_version:stored.content_pipeline_version,readme_source_sha:stored.readme_source_sha,
             content_prepared_at:stored.content_prepared_at,experience:stored.experience
           }
         : await prepareProjectContent({readme:item.readme,repo,release:item.release,freeAI});
+      // A failed content-pipeline upgrade must never replace a previously
+      // readable detail page with an empty state. Keep the last known-good
+      // rendering when the source README is unchanged and retry it later.
+      if (prepared.content_ready!==true && stored.content_ready===true && stored.readme_markdown && stored.readme_source_sha===fingerprint) {
+        prepared={
+          content_ready:true,translation_status:stored.translation_status,readme_markdown:stored.readme_markdown,
+          content_pipeline_version:Number(stored.content_pipeline_version || 1),readme_source_sha:stored.readme_source_sha,
+          content_prepared_at:stored.content_prepared_at,experience:prepared.experience || stored.experience,
+          content_refresh_error:prepared.content_error || 'content_refresh_pending'
+        };
+      }
       const tag=attentionTag({eventType,isTrending:item.isTrending,starVelocity:item.starVelocity,starDelta:item.starDelta,hasPrevious:Boolean(item.previousSnapshot),stars:Number(repo.stargazers_count || 0)});
       const payload={
         full_name:repo.full_name,name:repo.name,description:repo.description,stargazers_count:Number(repo.stargazers_count || 0),forks_count:Number(repo.forks_count || 0),topics:repo.topics || [],homepage:repo.homepage,created_at:repo.created_at,updated_at:repo.updated_at,pushed_at:repo.pushed_at,html_url:repo.html_url,license:repo.license,default_branch:repo.default_branch,

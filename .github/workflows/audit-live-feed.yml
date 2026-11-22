@@ -67,6 +67,8 @@ jobs:
             cover:p.cover,
             evidence_quotes:p.evidence_quotes,
             content_ready:p.content_ready,
+            content_pipeline_version:p.content_pipeline_version,
+            readme_length:String(p.readme_markdown || '').length,
             translation_status:p.translation_status,
             attention_tag:p.attention_tag
           }));
