@@ -42,7 +42,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Scan and publish feed
         run: |
-          if [ "${{ inputs.refresh || '0' }}" != "0" ]; then
+          if [ "${{ github.event_name }}" = "push" ]; then
+            npm run feed:refresh
+          elif [ "${{ inputs.refresh || '0' }}" != "0" ]; then
             node scripts/scan-feed.cjs --refresh="${{ inputs.refresh }}"
           elif [ "${{ inputs.backfill || '0' }}" = "0" ]; then
             npm run feed:scan
