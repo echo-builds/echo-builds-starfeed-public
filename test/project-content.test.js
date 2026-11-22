@@ -61,3 +61,24 @@ test('候选按产品赛道配比抽取，避免 AI 基础设施挤满首页',()
   const counts=Object.fromEntries(lanes.map(lane=>[lane,selected.filter(item=>item.lane===lane).length]));
   assert.deepEqual(counts,{ai_capability:5,ai_product:5,product_building:4,product_operations:3,product_inspiration:3});
 });
+
+test('旧项目连续两次不合格才从推荐流移除',()=>{
+  const first=feed.nextQualityReview(null,{keep:false,reject_reason:'纯安全攻防工具'},'2026-11-22T01:00:00Z');
+  assert.equal(first.reject_streak,1);
+  assert.equal(feed.shouldRemoveExisting(first),false);
+  const second=feed.nextQualityReview(first,{keep:false,reject_reason:'仍然缺少通用产品价值'},'2026-11-22T07:00:00Z');
+  assert.equal(second.reject_streak,2);
+  assert.equal(feed.shouldRemoveExisting(second),true);
+});
+
+test('一次合格复审会清空旧项目的连续拒绝记录',()=>{
+  const previous={status:'rejected',reject_streak:1,last_reason:'证据不足'};
+  const approved=feed.nextQualityReview(previous,{keep:true},'2026-11-22T07:00:00Z');
+  assert.deepEqual(approved,{status:'approved',reject_streak:0,last_reason:'',last_reviewed_at:'2026-11-22T07:00:00Z'});
+  assert.equal(feed.shouldRemoveExisting(approved),false);
+});
+
+test('分类服务没有结论时保持旧项目原状态',()=>{
+  const previous={status:'rejected',reject_streak:1,last_reason:'证据不足'};
+  assert.equal(feed.nextQualityReview(previous,null),previous);
+});

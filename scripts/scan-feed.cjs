@@ -148,7 +148,7 @@ function evidenceSupported(source,quote) {
 async function classify(items) {
   if (!items.length || !freeAI.enabled()) return new Map();
   const decisions=new Map();
-  const system='你为“AI 产品经理值得了解的 GitHub 项目”做严格入选判断。入选不是因为项目带 AI、Agent、MCP 等名词，而是它必须能直接帮助通用 AI 产品经理理解至少一项产品判断：真实用户问题、新交互方式、AI 能力边界、产品实现取舍、数据运营或商业化。纯底层工程、安全攻防、代码保护、模型格式、逆向工程和垂直技术组件，如果不能清楚转化为大多数 AI 产品经理可迁移的产品判断，必须 keep=false。排除教程、资源合集、批量克隆、只有热度或技术名词但用途不清的仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","keep":true,"category":"ai_capability|ai_product|product_building|product_operations|product_inspiration","title":"8至24字中文标题","cover_copy":"18至55字中文封面文案","reason":"为什么值得AI产品经理关注","evidence_quote":"候选材料中的逐字原文","release_important":false,"release_reason":""}]}。title 直接说明它为谁解决什么问题或带来什么能力，不堆砌仓库名和术语。cover_copy 用普通产品经理能快速扫读的语言，优先写用户问题和结果，避免以“通过、基于、一套”开头；MCP、RAG、SDK 等术语只有不可替代时才保留。不得把项目方的比较或营销主张写成已验证事实。没有逐字证据不得 keep=true；不要为了数量降低标准。只有当 Release 带来用户可感知的新能力、新交互或工作流，显著改变部署成本、性能、成本或兼容性，或属于重要主版本时，release_important 才能为 true；依赖升级、文档修改、小修复和常规维护均为 false。';
+  const system='你为“AI 产品经理值得了解的 GitHub 项目”做严格入选判断。入选不是因为项目带 AI、Agent、MCP 等名词，而是它必须能直接帮助通用 AI 产品经理理解至少一项产品判断：真实用户问题、新交互方式、AI 能力边界、产品实现取舍、数据运营或商业化。纯底层工程、安全攻防、代码保护、模型格式、逆向工程和垂直技术组件，如果不能清楚转化为大多数 AI 产品经理可迁移的产品判断，必须 keep=false。排除教程、资源合集、批量克隆、只有热度或技术名词但用途不清的仓库。只输出 JSON：{"items":[{"full_name":"owner/repo","keep":true,"reject_reason":"keep=false 时说明不适合推荐的具体原因","category":"ai_capability|ai_product|product_building|product_operations|product_inspiration","title":"8至24字中文标题","cover_copy":"18至55字中文封面文案","reason":"为什么值得AI产品经理关注","evidence_quote":"候选材料中的逐字原文","release_important":false,"release_reason":""}]}。title 直接说明它为谁解决什么问题或带来什么能力，不堆砌仓库名和术语。cover_copy 用普通产品经理能快速扫读的语言，优先写用户问题和结果，避免以“通过、基于、一套”开头；MCP、RAG、SDK 等术语只有不可替代时才保留。不得把项目方的比较或营销主张写成已验证事实。没有逐字证据不得 keep=true；不要为了数量降低标准。只有当 Release 带来用户可感知的新能力、新交互或工作流，显著改变部署成本、性能、成本或兼容性，或属于重要主版本时，release_important 才能为 true；依赖升级、文档修改、小修复和常规维护均为 false。';
   for (let index=0;index<items.length;index+=5) {
     const batch=items.slice(index,index+5);
     try {
@@ -172,6 +172,24 @@ function attentionTag({eventType,isTrending,starVelocity,starDelta,hasPrevious,s
   if (isTrending) return 'GitHub Trending';
   if (hasPrevious && starDelta>=10 && starVelocity>=40 && stars>=200) return '近期爆发';
   return '';
+}
+function nextQualityReview(previous,decision,reviewedAt=new Date().toISOString()) {
+  const prior=previous && typeof previous==='object' ? previous : null;
+  if (decision?.keep===false) {
+    const rejectStreak=prior?.status==='rejected' ? Number(prior.reject_streak || 0)+1 : 1;
+    return {
+      status:'rejected',reject_streak:rejectStreak,
+      last_reason:clean(decision.reject_reason || decision.reason || '不符合当前推荐标准',180),
+      last_reviewed_at:reviewedAt
+    };
+  }
+  if (decision?.keep===true) {
+    return {status:'approved',reject_streak:0,last_reason:'',last_reviewed_at:reviewedAt};
+  }
+  return prior;
+}
+function shouldRemoveExisting(review) {
+  return review?.status==='rejected' && Number(review.reject_streak || 0)>=2;
 }
 async function main() {
   if (!configured()) throw new Error('DATABASE_URL is required');
@@ -246,8 +264,19 @@ async function main() {
       const quote=clean(decision?.evidence_quote,320);
       const source=`${repo.description || ''}\n${item.readme}`;
       const keep=decision?.keep===true && category && evidenceSupported(source,quote);
+      // A model saying keep=true is not an approval until its quoted evidence
+      // is actually present in the repository material.
+      const reviewDecision=decision?.keep===true && !keep ? null : decision;
+      const qualityReview=nextQualityReview(item.storedPayload?.quality_review,reviewDecision);
       if (decision && decision.keep===false && item.existing) {
-        await db`UPDATE feed_events SET status='removed' WHERE project_full_name_key=${fullNameKey} AND status='published'`;
+        await db`
+          UPDATE projects
+          SET payload=jsonb_set(payload,'{quality_review}',${JSON.stringify(qualityReview)}::jsonb,true),
+            last_scanned_at=now(),updated_at=now()
+          WHERE full_name_key=${fullNameKey}`;
+        if (shouldRemoveExisting(qualityReview)) {
+          await db`UPDATE feed_events SET status='removed' WHERE project_full_name_key=${fullNameKey} AND status='published'`;
+        }
         continue;
       }
       if (!keep && !cached) continue;
@@ -288,6 +317,7 @@ async function main() {
         cover:coverFrom(item.readme,repo) || stored.cover || null,
         attention_category:category,evidence_quotes:quote ? [quote] : cached?.evidence ? [cached.evidence] : [],selection_reason:reason,
         release:releasePayload || stored.release || null,star_velocity_24h:Math.round(item.starVelocity*10)/10,attention_tag:tag,
+        quality_review:qualityReview || stored.quality_review || null,
         ...prepared
       };
       await db`
@@ -313,4 +343,4 @@ async function main() {
 
 if (require.main===module) main().catch(error=>{ console.error(error); process.exitCode=1; });
 
-module.exports._test={balancedEntries,readmeImages,coverFrom,attentionTag,laneFor};
+module.exports._test={balancedEntries,readmeImages,coverFrom,attentionTag,laneFor,nextQualityReview,shouldRemoveExisting};
