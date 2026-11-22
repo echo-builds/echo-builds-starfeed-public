@@ -260,8 +260,10 @@ async function main() {
       ? await db`
           SELECT p.full_name_key,p.payload FROM projects p
           WHERE EXISTS(SELECT 1 FROM feed_events e WHERE e.project_full_name_key=p.full_name_key AND e.status='published')
-          ORDER BY CASE WHEN COALESCE(p.payload->>'content_ready','false')='true' THEN 1 ELSE 0 END,
-            CASE WHEN COALESCE((p.payload->>'content_pipeline_version')::int,0)<>${CONTENT_PIPELINE_VERSION} THEN 0 ELSE 1 END,
+          ORDER BY CASE WHEN COALESCE(p.payload->>'content_ready','false')<>'true'
+              OR COALESCE((p.payload->>'content_pipeline_version')::int,0)<>${CONTENT_PIPELINE_VERSION} THEN 0 ELSE 1 END,
+            COALESCE((SELECT max(e.timeline_position) FROM feed_events e
+              WHERE e.project_full_name_key=p.full_name_key AND e.status='published'),0) DESC,
             CASE WHEN p.payload#>>'{quality_review,status}'='rejected' THEN 0 ELSE 1 END,
             p.last_scanned_at ASC LIMIT ${refreshTarget}`
       : await db`SELECT full_name_key,payload FROM projects ORDER BY last_scanned_at ASC LIMIT 80`;

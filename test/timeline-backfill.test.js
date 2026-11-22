@@ -33,3 +33,8 @@ test('内容升级失败时保留上一个可读版本并小批量重试',()=>{
   assert.match(scanner,/content_refresh_error/);
   assert.equal(packageJson.scripts['feed:refresh'],'node scripts/scan-feed.cjs --refresh=10');
 });
+
+test('内容迁移优先处理用户最容易看到的顶部项目',()=>{
+  assert.match(scanner,/max\(e\.timeline_position\)/);
+  assert.match(scanner,/timeline_position[\s\S]+DESC/);
+});
