@@ -9,6 +9,10 @@ on:
         description: 'Backfill target (0 for normal scan)'
         required: false
         default: '0'
+      refresh:
+        description: 'Re-audit and prepare existing published projects'
+        required: false
+        default: '0'
 
 concurrency:
   group: reposcroll-feed-scan
@@ -32,7 +36,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Scan and publish feed
         run: |
-          if [ "${{ inputs.backfill || '0' }}" = "0" ]; then
+          if [ "${{ inputs.refresh || '0' }}" != "0" ]; then
+            node scripts/scan-feed.cjs --refresh="${{ inputs.refresh }}"
+          elif [ "${{ inputs.backfill || '0' }}" = "0" ]; then
             npm run feed:scan
           else
             node scripts/scan-feed.cjs --backfill="${{ inputs.backfill }}"

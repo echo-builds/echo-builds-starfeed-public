@@ -61,7 +61,7 @@ h1{font-size:31px;line-height:1.15;letter-spacing:-.03em;margin:0 0 5px}
 .card-copy h2{font-size:14px;line-height:1.43;margin:0;font-weight:700;overflow-wrap:anywhere}
 .card-meta{min-height:32px;padding:3px 9px 9px;display:flex;justify-content:space-between;align-items:baseline;gap:4px;color:var(--muted);font-size:clamp(9px,2.35vw,11px);font-variant-numeric:tabular-nums}
 .stars{font-weight:650;color:#815121;white-space:nowrap}
-.published{white-space:nowrap}
+.published{white-space:nowrap;border:1px solid #d9d4ca;border-radius:999px;padding:2px 6px;color:#58524a;background:#faf9f6;font-weight:650}
 .theme-name{margin:0 2px 8px;font-size:17px}
 #groups section+section{margin-top:23px}
 .empty{border:1px dashed var(--rule);border-radius:14px;text-align:center;padding:35px 14px;margin:12px 0;color:var(--muted)}
@@ -552,7 +552,7 @@ function discoveryResult(item) {
   const chineseDescription = hasChinese(description) ? description : '';
   const summary = repo.ai_summary || chineseDescription || (description ? `仓库原始说明：${description}` : '');
   if (!summary) return null;
-  return {...repo,title:repo.ai_title || repo.name,summary,coverText:summary};
+  return {...repo,title:repo.ai_title || repo.name,summary,coverText:repo.cover_copy || summary};
 }
 function getDiscoverCatalog() {
   if (!state.catalog.length) return getCuratedCatalog();
@@ -574,8 +574,8 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,feed_event_id,feed_event_type,feed_published_at,star_velocity_24h} = item;
-  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,feed_event_id,feed_event_type,feed_published_at,star_velocity_24h,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,experience} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,experience,approximate:false};
 }
 function credibleRepo(item) {
   const text = `${item.name || ''} ${item.description || ''}`;
@@ -686,15 +686,22 @@ async function loadDiscover({reset = false} = {}) {
       data.next_cursor = Number(data.next_page || page + 1);
     }
     incoming = (Array.isArray(data?.items) ? data.items : []).map(shape);
-    const replaceExisting = reset && incoming.length >= 8;
     const merged = new Map();
-    const ordered = reset ? [incoming,current] : [current,incoming];
-    for (const group of ordered) for (const repo of group) if (!merged.has(feedKey(repo))) merged.set(feedKey(repo),repo);
-    if (replaceExisting && !state.timelineAvailable) {
-      merged.clear();
-      for (const repo of incoming) merged.set(feedKey(repo),repo);
+    if (state.timelineAvailable) {
+      // The persistent feed is the source of truth. Static examples and an old
+      // discover cache must never be interleaved with the chronological feed.
+      const ordered=reset?[incoming]:[current.filter(repo=>repo.feed_event_id),incoming];
+      for (const group of ordered) for (const repo of group) if (!merged.has(feedKey(repo))) merged.set(feedKey(repo),repo);
+      state.catalog=[...merged.values()].sort((a,b)=>Number(b.feed_event_id || 0)-Number(a.feed_event_id || 0));
+    } else {
+      const ordered=reset?[incoming,current]:[current,incoming];
+      for (const group of ordered) for (const repo of group) if (!merged.has(feedKey(repo))) merged.set(feedKey(repo),repo);
+      if (reset&&incoming.length>=8) {
+        merged.clear();
+        for (const repo of incoming) merged.set(feedKey(repo),repo);
+      }
+      state.catalog=[...merged.values()];
     }
-    state.catalog = [...merged.values()];
     state.discoveryCursor = data.next_cursor ?? data.next_page ?? null;
     state.discoveryDone = data.has_more === false || incoming.length === 0;
     state.newCount = reset && state.timelineAvailable ? Number(data.new_count || 0) : state.newCount;
@@ -702,7 +709,7 @@ async function loadDiscover({reset = false} = {}) {
     state.date = today();
     state.source = state.timelineAvailable ? 'timeline' : 'live';
     state.lastFetch = Date.now();
-    storage.put('recent-v3',{date:state.date,repos:state.catalog.slice(0,200),cursor:state.discoveryCursor});
+    storage.put('recent-v3',{date:state.date,mode:state.timelineAvailable?'timeline':'discover',repos:state.catalog.slice(0,200),cursor:state.discoveryCursor});
   } catch {
     state.refreshError = true;
   } finally {
@@ -809,7 +816,9 @@ function card(repo) {
   el.querySelector('h2').textContent = titleOf(repo);
   el.querySelector('.stars').textContent = '★ ' + (repo.approximate ? '约 ' : '') + compact.format(repo.stargazers_count);
   const published=el.querySelector('.published');
-  if (repo.feed_event_type==='release') published.textContent='重要更新';
+  const allowedTags=new Set(['重要更新','GitHub Trending','近期爆发']);
+  const attentionTag=allowedTags.has(repo.attention_tag)?repo.attention_tag:(repo.feed_event_type==='release'?'重要更新':'');
+  if (attentionTag) published.textContent=attentionTag;
   else published.remove();
   fillCover(el.querySelector('.cover'),repo);
   const trigger = el.querySelector('.project');
@@ -942,6 +951,18 @@ function appendExperience(actions,experience) {
   actions.insertBefore(link,actions.querySelector('.save'));
 }
 async function hydrateReadme(repo,body,source,actions) {
+  if (repo.content_ready===true && repo.readme_markdown) {
+    renderReadmeMarkdown(repo.readme_markdown,body);
+    source.textContent=repo.translation_status==='original_chinese'?'README 原文（中文）':'已翻译为中文 · 内容来自项目 README';
+    appendExperience(actions,repo.experience);
+    return;
+  }
+  if (repo.feedResult) {
+    body.replaceChildren();
+    source.textContent='中文详情正在后台准备';
+    appendExperience(actions,repo.experience);
+    return;
+  }
   try {
     let response;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -955,19 +976,19 @@ async function hydrateReadme(repo,body,source,actions) {
     }
     if (!response.ok) throw new Error('Project HTTP ' + response.status);
     const data = await response.json();
-    if (!data.readme_markdown) throw new Error('README content unavailable');
+    if (!data.content_ready || !data.readme_markdown) throw new Error('README content unavailable');
     if (state.openRepo !== repoKey(repo)) return;
     renderReadmeMarkdown(data.readme_markdown,body);
     source.textContent = data.translation_status === 'translated'
       ? '已翻译为中文 · 内容来自项目 README'
       : data.translation_status === 'original_chinese'
         ? 'README 原文（中文）'
-        : '当前显示 README 原文（中文翻译暂不可用）';
+        : '中文详情正在后台准备';
     appendExperience(actions,data.experience);
   } catch {
     if (state.openRepo !== repoKey(repo)) return;
-    body.replaceChildren(section('项目简介',repo.summary || 'README 暂时无法读取，请稍后重试。'));
-    source.textContent = 'README 暂时无法读取';
+    body.replaceChildren();
+    source.textContent = '中文详情暂时不可用';
   }
 }
 function openDetails(repo,trigger,{pushRoute = true} = {}) {
@@ -986,15 +1007,16 @@ function openDetails(repo,trigger,{pushRoute = true} = {}) {
   header.textContent = titleOf(repo);
   const meta = paragraph(`${repo.full_name} · ★ ${repo.approximate ? '约 ' : ''}${exact.format(repo.stargazers_count)}`,'detail-meta');
   details.replaceChildren(header,meta);
+  if (repo.summary) details.append(section('项目简介',repo.summary));
+  if (repo.selection_reason && repo.selection_reason!==repo.summary) details.append(section('为什么值得关注',repo.selection_reason));
   if (repo.searchResult) {
-    if (repo.summary) details.append(section('为什么推荐',repo.summary));
     if (Array.isArray(repo.ai_bullets) && repo.ai_bullets.length) details.append(section('已核验的优势',repo.ai_bullets));
     if (Array.isArray(repo.ai_limitations) && repo.ai_limitations.length) details.append(section('使用门槛或未验证',repo.ai_limitations));
     if (Array.isArray(repo.ai_evidence) && repo.ai_evidence.length) details.append(section('README 证据',repo.ai_evidence));
   }
   const readmeBody = document.createElement('article');
   readmeBody.className = 'readme-body';
-  readmeBody.append(paragraph('正在读取 README 中的产品介绍…','loading-copy'));
+  if (!repo.feedResult && !repo.content_ready) readmeBody.append(paragraph('正在准备中文详情…','loading-copy'));
   const readmeSource = paragraph('','readme-source');
   details.append(readmeBody,readmeSource);
   const actions = document.createElement('div');

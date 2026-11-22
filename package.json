@@ -6,7 +6,8 @@
     "test":"node --test",
     "db:migrate":"node scripts/migrate-feed.cjs",
     "feed:scan":"node scripts/scan-feed.cjs",
-    "feed:backfill":"node scripts/scan-feed.cjs --backfill=200"
+    "feed:backfill":"node scripts/scan-feed.cjs --backfill=200",
+    "feed:refresh":"node scripts/scan-feed.cjs --refresh=20"
   },
   "dependencies": {
     "@neondatabase/serverless":"^1.0.2"

@@ -1,0 +1,63 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+
+const content=require('../api/_lib/project-content');
+const feed=require('../scripts/scan-feed.cjs')._test;
+
+test('产品详情只选产品介绍并排除安装和开发章节',()=>{
+  const markdown=[
+    '# Demo','A tool for product teams.','## Features','- Record interviews','- Extract evidence',
+    '## Installation','npm install demo','## Development','Run tests'
+  ].join('\n');
+  const selected=content.selectProductMarkdown(markdown);
+  assert.match(selected,/Record interviews/);
+  assert.doesNotMatch(selected,/npm install/);
+  assert.doesNotMatch(selected,/Run tests/);
+});
+
+test('长 README 会被拆成短段翻译并保存为准备完成状态',async()=>{
+  const calls=[];
+  const freeAI={
+    enabled:()=>true,
+    generate:async messages=>{
+      calls.push(messages);
+      return '# 中文介绍\n这是忠实翻译后的产品能力。';
+    }
+  };
+  const readme=['# Product','English product overview. '.repeat(80),'## Features','Useful workflow. '.repeat(90)].join('\n');
+  const prepared=await content.prepareProjectContent({
+    readme,repo:{full_name:'demo/product',default_branch:'main'},release:null,freeAI
+  });
+  assert.equal(prepared.content_ready,true);
+  assert.equal(prepared.translation_status,'translated');
+  assert.ok(calls.length>=2);
+  assert.match(prepared.readme_markdown,/中文介绍/);
+});
+
+test('翻译失败不会把英文 README 发布给用户',async()=>{
+  const prepared=await content.prepareProjectContent({
+    readme:'# Product\nAn English product overview and useful features.',
+    repo:{full_name:'demo/product',default_branch:'main'},release:null,
+    freeAI:{enabled:()=>true,generate:async()=>{throw new Error('timeout');}}
+  });
+  assert.equal(prepared.content_ready,false);
+  assert.equal(prepared.translation_status,'pending');
+  assert.equal(prepared.readme_markdown,'');
+});
+
+test('关注标签严格按重要更新、Trending、近期爆发排序',()=>{
+  const base={eventType:'new',isTrending:false,starVelocity:80,starDelta:20,hasPrevious:true,stars:1000};
+  assert.equal(feed.attentionTag({...base,eventType:'release',isTrending:true}),'重要更新');
+  assert.equal(feed.attentionTag({...base,isTrending:true}),'GitHub Trending');
+  assert.equal(feed.attentionTag(base),'近期爆发');
+  assert.equal(feed.attentionTag({...base,starDelta:2}),'');
+});
+
+test('候选按产品赛道配比抽取，避免 AI 基础设施挤满首页',()=>{
+  const lanes=['ai_capability','ai_product','product_building','product_operations','product_inspiration'];
+  const entries=[];
+  for (const lane of lanes) for (let index=0;index<20;index++) entries.push({lane,repo:{full_name:`${lane}/${index}`,name:String(index),description:'',topics:[],stargazers_count:100000-index,created_at:'2026-01-01',forks_count:100}});
+  const selected=feed.balancedEntries(entries,20);
+  const counts=Object.fromEntries(lanes.map(lane=>[lane,selected.filter(item=>item.lane===lane).length]));
+  assert.deepEqual(counts,{ai_capability:5,ai_product:5,product_building:4,product_operations:3,product_inspiration:3});
+});
