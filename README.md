@@ -78,7 +78,7 @@ python3 -m http.server 4173
 
 随后打开 http://localhost:4173 。GitHub 登录、Stars 同步、推荐与搜索接口依赖 Vercel Functions，静态预览不能完整运行这些能力。
 
-Vercel 部署需要配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`SESSION_SECRET` 和 `DATABASE_URL`。首次启用持久推荐流时运行 `npm run db:migrate`，再运行 `npm run feed:backfill` 预处理首批 200 个候选项目。\n\n推荐库每 6 小时由公开仓库的 `scan-feed.yml` 扫描一次。配置 GitHub Actions Secret `DATABASE_URL` 和 `FEED_GITHUB_TOKEN`，并将 Actions Variable `FEED_SCANNER_ENABLED` 设为 `true` 后才会开始写入；未配置时线上会继续使用原有推荐接口，不会中断浏览。
+Vercel 部署需要配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` 和 `SESSION_SECRET`。
 
 ### 免费运行与可选 AI 配置
 
