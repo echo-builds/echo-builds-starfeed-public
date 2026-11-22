@@ -1,6 +1,6 @@
 const {configured,sql} = require('../api/_lib/db');
 const freeAI = require('../api/_lib/free-ai');
-const {prepareProjectContent,sourceFingerprint} = require('../api/_lib/project-content');
+const {CONTENT_PIPELINE_VERSION,prepareProjectContent,sourceFingerprint} = require('../api/_lib/project-content');
 const verified = require('../data/featured-copy.json').entries || {};
 
 const GITHUB = 'https://api.github.com';
@@ -242,7 +242,7 @@ async function main() {
   try {
     await cleanupHardRejectedPublished(db,quality);
     const trending=await trendingRepos();
-    const since=dateKey(new Date(Date.now()-(backfillTarget ? 730 : 90)*DAY));
+    const since=dateKey(new Date(Date.now()-(backfillTarget ? 3650 : 90)*DAY));
     const minStars=backfillTarget ? 500 : 50;
     const candidateMap=new Map();
     if (!refreshTarget) {
@@ -260,7 +260,8 @@ async function main() {
       ? await db`
           SELECT p.full_name_key,p.payload FROM projects p
           WHERE EXISTS(SELECT 1 FROM feed_events e WHERE e.project_full_name_key=p.full_name_key AND e.status='published')
-          ORDER BY CASE WHEN p.payload#>>'{quality_review,status}'='rejected' THEN 0 ELSE 1 END,
+          ORDER BY CASE WHEN COALESCE((p.payload->>'content_pipeline_version')::int,0)<>${CONTENT_PIPELINE_VERSION} THEN 0 ELSE 1 END,
+            CASE WHEN p.payload#>>'{quality_review,status}'='rejected' THEN 0 ELSE 1 END,
             CASE WHEN COALESCE(p.payload->>'content_ready','false')='true' THEN 1 ELSE 0 END,
             p.last_scanned_at ASC LIMIT ${refreshTarget}`
       : await db`SELECT full_name_key,payload FROM projects ORDER BY last_scanned_at ASC LIMIT 80`;
@@ -365,10 +366,11 @@ async function main() {
       if (!title || !coverCopy) continue;
       const fingerprint=sourceFingerprint(item.readme);
       const stored=item.storedPayload || {};
-      const prepared=stored.content_ready===true && stored.readme_source_sha===fingerprint
+      const prepared=stored.content_ready===true && stored.readme_source_sha===fingerprint && stored.content_pipeline_version===CONTENT_PIPELINE_VERSION
         ? {
             content_ready:true,translation_status:stored.translation_status,readme_markdown:stored.readme_markdown,
-            readme_source_sha:stored.readme_source_sha,content_prepared_at:stored.content_prepared_at,experience:stored.experience
+            content_pipeline_version:stored.content_pipeline_version,readme_source_sha:stored.readme_source_sha,
+            content_prepared_at:stored.content_prepared_at,experience:stored.experience
           }
         : await prepareProjectContent({readme:item.readme,repo,release:item.release,freeAI});
       const tag=attentionTag({eventType,isTrending:item.isTrending,starVelocity:item.starVelocity,starDelta:item.starDelta,hasPrevious:Boolean(item.previousSnapshot),stars:Number(repo.stargazers_count || 0)});
@@ -393,9 +395,13 @@ async function main() {
       if (payload.cover) quality.with_cover++;
       if (tag) quality.tagged++;
       if (!eventType || prepared.content_ready!==true) continue;
+      const positionRows=eventType==='classic'
+        ? await db`SELECT COALESCE(min(timeline_position),1000000000)::bigint - 1 AS position FROM feed_events`
+        : await db`SELECT COALESCE(max(timeline_position),1000000000)::bigint + 1 AS position FROM feed_events`;
+      const timelinePosition=Number(positionRows[0].position);
       const inserted=await db`
-        INSERT INTO feed_events (event_key,project_full_name_key,event_type,occurred_at,selection_reason,release_payload,rank_score,status)
-        VALUES (${eventKey},${fullNameKey},${eventType},${occurredAt},${reason},${releasePayload ? JSON.stringify(releasePayload) : null}::jsonb,${initialScore(repo)+item.starVelocity},'published')
+        INSERT INTO feed_events (event_key,project_full_name_key,event_type,occurred_at,selection_reason,release_payload,rank_score,timeline_position,status)
+        VALUES (${eventKey},${fullNameKey},${eventType},${occurredAt},${reason},${releasePayload ? JSON.stringify(releasePayload) : null}::jsonb,${initialScore(repo)+item.starVelocity},${timelinePosition},'published')
         ON CONFLICT (event_key) DO NOTHING RETURNING id`;
       if (inserted.length) published++;
     }

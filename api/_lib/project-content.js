@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const CONTENT_PIPELINE_VERSION = 2;
 
 function isMostlyChinese(text) {
   const sample = String(text || '')
@@ -27,24 +28,14 @@ function sections(markdown) {
   return result;
 }
 
-function selectProductMarkdown(markdown,maxChars=3600) {
-  const include = /(about|overview|introduction|what is|why|feature|capabilit|how it works|workflow|use cases?|usage|demo|screenshots?|preview|product|介绍|关于|概览|功能|能力|工作原理|使用场景|怎么用|演示|截图)/i;
-  const exclude = /(install|setup|deploy|development|build from source|contribut|license|api reference|configuration|troubleshoot|benchmark detail|安装|部署|开发|贡献|许可证|配置|故障排查)/i;
+function selectProductMarkdown(markdown,maxChars=24000) {
+  const exclude = /(install|setup|deploy|development|build from source|building from source|contribut|license|api reference|configuration|troubleshoot|benchmark detail|changelog|release notes|acknowledg|credits?|sponsors?|donat|安装|部署|开发|源码构建|参与开发|贡献|许可证|配置|故障排查|更新记录|致谢|感谢支持|赞助)/i;
   const cleaned = String(markdown || '').replace(/```[\s\S]*?```/g,'').replace(/(?:\n\s*){3,}/g,'\n\n');
   const all = sections(cleaned);
-  const chosen = [];
-  for (let index=0;index<all.length;index++) {
-    const section=all[index];
-    if (!section.heading && index===0) chosen.push(section);
-    else if (include.test(section.heading) && !exclude.test(section.heading)) chosen.push(section);
-  }
-  if (chosen.length<2) {
-    for (const section of all) {
-      if (chosen.includes(section) || exclude.test(section.heading)) continue;
-      chosen.push(section);
-      if (chosen.length>=4) break;
-    }
-  }
+  // A detail view is a product-facing edition of the README, not a keyword
+  // excerpt. Preserve the author's narrative and original order, excluding
+  // only clearly operational or maintainer-facing sections.
+  const chosen=all.filter(section=>!section.heading || !exclude.test(section.heading));
   const lines=chosen.map(section=>section.body.join('\n').trim()).filter(Boolean).join('\n\n').split('\n');
   const kept=[];
   let total=0;
@@ -119,7 +110,7 @@ async function translateMarkdown(markdown,freeAI) {
   const translated=[];
   for (let index=0;index<chunks.length;index++) {
     const result=await freeAI.generate([
-      {role:'system',content:'你是忠实的 GitHub README 中文翻译器。只翻译正文，不总结、不扩写、不评价。保留 Markdown 标题层级、列表、图片、链接、命令、专有名词和代码。不要添加开场或结尾。'},
+      {role:'system',content:'你是忠实的 GitHub README 中文翻译器。只翻译正文，不总结、不扩写、不评价。保留 Markdown 标题层级、列表、图片、链接、命令、专有名词和代码。Markdown 表格必须保持原列数、竖线和分隔行，每个表格行只占一行，表格行之间不要插入空行。不要添加开场或结尾。'},
       {role:'user',content:`这是第 ${index+1}/${chunks.length} 段：\n\n${chunks[index]}`}
     ],{json:false,temperature:0,maxTokens:1600,timeoutMs:25000});
     if (!result || !/[㐀-鿿]/.test(result)) throw new Error('translation_missing_chinese');
@@ -132,6 +123,7 @@ async function prepareProjectContent({readme,repo,release,freeAI}) {
   const fingerprint=sourceFingerprint(readme);
   const selected=resolveImages(selectProductMarkdown(readme),repo);
   const base={
+    content_pipeline_version:CONTENT_PIPELINE_VERSION,
     readme_source_sha:fingerprint,
     content_prepared_at:new Date().toISOString(),
     experience:productExperience(repo,release)
@@ -148,6 +140,7 @@ async function prepareProjectContent({readme,repo,release,freeAI}) {
 }
 
 module.exports={
+  CONTENT_PIPELINE_VERSION,
   isMostlyChinese,sections,selectProductMarkdown,resolveImages,sourceFingerprint,markdownChunks,
   productExperience,translateMarkdown,prepareProjectContent
 };

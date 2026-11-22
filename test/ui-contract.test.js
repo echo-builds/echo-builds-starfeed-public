@@ -39,5 +39,12 @@ test('卡片只接受三种关注标签且与 Star 同行展示',()=>{
 test('数据库时间线不会混入静态精选并按事件倒序',()=>{
   const block=html.slice(html.indexOf('async function loadDiscover'),html.indexOf('function readFavorites'));
   assert.match(block,/current\.filter\(repo=>repo\.feed_event_id\)/);
-  assert.match(block,/Number\(b\.feed_event_id \|\| 0\)-Number\(a\.feed_event_id \|\| 0\)/);
+  assert.match(block,/feed_timeline_position/);
+});
+
+test('README 表格按真实表格渲染并兼容行间空行',()=>{
+  assert.match(html,/function markdownTableCells/);
+  assert.match(html,/function markdownLines/);
+  assert.match(html,/document\.createElement\('table'\)/);
+  assert.match(html,/className='table-scroll'/);
 });

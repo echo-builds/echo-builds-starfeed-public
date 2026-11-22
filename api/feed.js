@@ -13,6 +13,7 @@ function itemOf(row) {
     ...payload,
     release,
     feed_event_id:Number(row.feed_event_id),
+    feed_timeline_position:Number(row.timeline_position),
     feed_event_type:row.event_type,
     feed_published_at:row.feed_published_at,
     selection_reason:row.selection_reason || payload.selection_reason,
@@ -31,22 +32,22 @@ module.exports = async function handler(req,res) {
     const db = sql();
     const rows = before
       ? await db`
-          SELECT e.id AS feed_event_id,e.event_type,e.published_at AS feed_published_at,
+          SELECT e.id AS feed_event_id,e.timeline_position,e.event_type,e.published_at AS feed_published_at,
             e.selection_reason,e.release_payload,p.payload
           FROM feed_events e
           JOIN projects p ON p.full_name_key=e.project_full_name_key
-          WHERE e.status='published' AND e.id < ${before}
-          ORDER BY e.id DESC LIMIT ${limit + 1}`
+          WHERE e.status='published' AND e.timeline_position < ${before}
+          ORDER BY e.timeline_position DESC LIMIT ${limit + 1}`
       : await db`
-          SELECT e.id AS feed_event_id,e.event_type,e.published_at AS feed_published_at,
+          SELECT e.id AS feed_event_id,e.timeline_position,e.event_type,e.published_at AS feed_published_at,
             e.selection_reason,e.release_payload,p.payload
           FROM feed_events e
           JOIN projects p ON p.full_name_key=e.project_full_name_key
           WHERE e.status='published'
-          ORDER BY e.id DESC LIMIT ${limit + 1}`;
+          ORDER BY e.timeline_position DESC LIMIT ${limit + 1}`;
     const headRows = await db`SELECT max(id)::bigint AS head_id FROM feed_events WHERE status='published'`;
     const countRows = seen
-      ? await db`SELECT count(*)::integer AS count FROM feed_events WHERE status='published' AND id > ${seen}`
+      ? await db`SELECT count(*)::integer AS count FROM feed_events WHERE status='published' AND event_type<>'classic' AND id > ${seen}`
       : [{count:0}];
     const hasMore = rows.length > limit;
     const page = rows.slice(0,limit);
@@ -54,7 +55,7 @@ module.exports = async function handler(req,res) {
       items:page.map(itemOf),
       head_id:headRows[0]?.head_id ? Number(headRows[0].head_id) : null,
       new_count:Number(countRows[0]?.count || 0),
-      next_cursor:hasMore && page.length ? Number(page[page.length - 1].feed_event_id) : null,
+      next_cursor:hasMore && page.length ? Number(page[page.length - 1].timeline_position) : null,
       has_more:hasMore,
       source:'persistent_feed'
     });

@@ -1,0 +1,47 @@
+name: Backfill RepoScroll classics
+
+on:
+  schedule:
+    # 12:43 Asia/Shanghai. Keep this away from the six-hour live scan.
+    - cron: '43 4 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Number of historical candidates to review'
+        required: false
+        default: '20'
+
+concurrency:
+  group: reposcroll-feed-scan
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    if: ${{ vars.FEED_SCANNER_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - name: Apply database schema
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Review and append historical classics
+        run: node scripts/scan-feed.cjs --backfill="${{ inputs.target || '20' }}"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GITHUB_API_TOKEN: ${{ github.token }}
+          FREE_AI_PROVIDER: ${{ vars.FREE_AI_PROVIDER }}
+          ENABLE_FREE_GEMINI: ${{ vars.ENABLE_FREE_GEMINI }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Audit feed quality
+        run: npm run feed:audit
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

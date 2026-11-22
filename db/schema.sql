@@ -23,11 +23,20 @@ CREATE TABLE IF NOT EXISTS feed_events (
   selection_reason text NOT NULL,
   release_payload jsonb,
   rank_score numeric NOT NULL DEFAULT 0,
+  timeline_position bigint,
   status text NOT NULL DEFAULT 'published' CHECK (status IN ('draft','published','removed'))
 );
 
+ALTER TABLE feed_events ADD COLUMN IF NOT EXISTS timeline_position bigint;
+UPDATE feed_events SET timeline_position=1000000000 + id WHERE timeline_position IS NULL;
+ALTER TABLE feed_events ALTER COLUMN timeline_position SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS feed_events_timeline_position_idx
+  ON feed_events (timeline_position);
+
 CREATE INDEX IF NOT EXISTS feed_events_published_idx
   ON feed_events (id DESC) WHERE status = 'published';
+CREATE INDEX IF NOT EXISTS feed_events_published_timeline_idx
+  ON feed_events (timeline_position DESC) WHERE status = 'published';
 CREATE INDEX IF NOT EXISTS feed_events_project_idx
   ON feed_events (project_full_name_key, id DESC);
 

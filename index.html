@@ -111,6 +111,12 @@ dialog::backdrop{background:#18161280}
 .readme-body ul,.readme-body ol{padding-left:1.35em;margin:0 0 14px}
 .readme-body pre{overflow:auto;padding:13px;border-radius:9px;background:#f4f1ed;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
 .readme-body figure{margin:18px 0!important}
+.readme-body .table-scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--rule);border-radius:10px}
+.readme-body table{width:100%;border-collapse:collapse;background:#fff;font-size:14px;line-height:1.55}
+.readme-body th,.readme-body td{min-width:140px;padding:10px 12px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+.readme-body th{background:#f7f4f0;font-weight:750}
+.readme-body tr:last-child td{border-bottom:0}
+.readme-body th:last-child,.readme-body td:last-child{border-right:0}
 .readme-body .loading-copy{color:var(--muted)}
 .readme-source{font-size:12px;color:var(--muted);margin-top:-10px}
 .readme-source a{text-decoration:underline;text-underline-offset:2px}
@@ -574,8 +580,8 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,experience} = item;
-  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,experience,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_timeline_position,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,experience} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_timeline_position,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,experience,approximate:false};
 }
 function credibleRepo(item) {
   const text = `${item.name || ''} ${item.description || ''}`;
@@ -692,7 +698,7 @@ async function loadDiscover({reset = false} = {}) {
       // discover cache must never be interleaved with the chronological feed.
       const ordered=reset?[incoming]:[current.filter(repo=>repo.feed_event_id),incoming];
       for (const group of ordered) for (const repo of group) if (!merged.has(feedKey(repo))) merged.set(feedKey(repo),repo);
-      state.catalog=[...merged.values()].sort((a,b)=>Number(b.feed_event_id || 0)-Number(a.feed_event_id || 0));
+      state.catalog=[...merged.values()].sort((a,b)=>Number(b.feed_timeline_position || b.feed_event_id || 0)-Number(a.feed_timeline_position || a.feed_event_id || 0));
     } else {
       const ordered=reset?[incoming,current]:[current,incoming];
       for (const group of ordered) for (const repo of group) if (!merged.has(feedKey(repo))) merged.set(feedKey(repo),repo);
@@ -881,13 +887,47 @@ function markdownText(value) {
     .replace(/<[^>]+>/g,'')
     .trim();
 }
+function markdownTableCells(value) {
+  const line=String(value || '').trim();
+  if (!line.includes('|')) return null;
+  const source=line.replace(/^\|/,'').replace(/\|$/,'');
+  const cells=[];
+  let current='';
+  let escaped=false;
+  for (const character of source) {
+    if (escaped) { current+=character; escaped=false; continue; }
+    if (character==='\\') { escaped=true; continue; }
+    if (character==='|') { cells.push(current.trim()); current=''; continue; }
+    current+=character;
+  }
+  cells.push(current.trim());
+  return cells.length>=2 ? cells : null;
+}
+function markdownTableDivider(cells) {
+  return Array.isArray(cells) && cells.length>=2 && cells.every(cell=>/^:?-{3,}:?$/.test(cell.replace(/\s/g,'')));
+}
+function markdownLines(markdown) {
+  const source=String(markdown || '').replace(/\r/g,'').split('\n');
+  const result=[];
+  for (let index=0;index<source.length;index++) {
+    if (!source[index].trim()) {
+      const previous=result[result.length-1];
+      let next=index+1;
+      while (next<source.length && !source[next].trim()) next++;
+      if (markdownTableCells(previous) && markdownTableCells(source[next])) continue;
+    }
+    result.push(source[index]);
+  }
+  return result;
+}
 function renderReadmeMarkdown(markdown,node) {
   node.replaceChildren();
-  const lines = String(markdown || '').replace(/\r/g,'').split('\n');
+  const lines = markdownLines(markdown);
   let list = null;
   let code = null;
   const closeList = ()=>{ list = null; };
-  for (const raw of lines) {
+  for (let index=0;index<lines.length;index++) {
+    const raw=lines[index];
     const line = raw.trim();
     if (/^```/.test(line)) {
       closeList();
@@ -900,6 +940,42 @@ function renderReadmeMarkdown(markdown,node) {
       continue;
     }
     if (!line) { closeList(); continue; }
+    const headerCells=markdownTableCells(line);
+    const dividerCells=markdownTableCells(lines[index+1]);
+    if (headerCells && dividerCells && headerCells.length===dividerCells.length && markdownTableDivider(dividerCells)) {
+      closeList();
+      const wrapper=document.createElement('div');
+      wrapper.className='table-scroll';
+      const table=document.createElement('table');
+      const thead=document.createElement('thead');
+      const headRow=document.createElement('tr');
+      for (const value of headerCells) {
+        const cell=document.createElement('th');
+        cell.textContent=markdownText(value);
+        headRow.append(cell);
+      }
+      thead.append(headRow);
+      table.append(thead);
+      const tbody=document.createElement('tbody');
+      index+=2;
+      while (index<lines.length) {
+        const rowCells=markdownTableCells(lines[index]);
+        if (!rowCells || markdownTableDivider(rowCells)) break;
+        const row=document.createElement('tr');
+        for (let column=0;column<headerCells.length;column++) {
+          const cell=document.createElement('td');
+          cell.textContent=markdownText(rowCells[column] || '');
+          row.append(cell);
+        }
+        tbody.append(row);
+        index++;
+      }
+      index--;
+      table.append(tbody);
+      wrapper.append(table);
+      node.append(wrapper);
+      continue;
+    }
     const image = line.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)(?:\s+["'][^"']*["'])?\)$/i);
     const htmlImage = line.match(/^<img\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["'][^>]*>/i);
     if (image || htmlImage) {

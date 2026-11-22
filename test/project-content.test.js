@@ -15,6 +15,24 @@ test('产品详情只选产品介绍并排除安装和开发章节',()=>{
   assert.doesNotMatch(selected,/Run tests/);
 });
 
+test('产品详情保留自然语言标题下的连续产品叙事',()=>{
+  const markdown=[
+    '# 岛仔 · Daozai','一座小岛，装下桌面日常。',
+    '## 微信里有新消息，看一眼岛边','微信和 QQ 未读提醒。',
+    '## 换个皮肤，也换个位置','支持五款皮肤和三边停靠。',
+    '## 听歌时，歌词就在抬眼处','播放、暂停、切歌和歌词。',
+    '## 日程、待办和专注，放在一起','| 想做的事 | 岛仔能帮你 |','| --- | --- |','| 专心做事 | 专注与休息计时 |',
+    '## 下载安装','下载安装包。','## 开源与致谢','感谢贡献者。'
+  ].join('\n');
+  const selected=content.selectProductMarkdown(markdown);
+  assert.match(selected,/微信和 QQ 未读提醒/);
+  assert.match(selected,/五款皮肤和三边停靠/);
+  assert.match(selected,/播放、暂停、切歌和歌词/);
+  assert.match(selected,/\| 想做的事 \| 岛仔能帮你 \|/);
+  assert.doesNotMatch(selected,/下载安装包/);
+  assert.doesNotMatch(selected,/感谢贡献者/);
+});
+
 test('长 README 会被拆成短段翻译并保存为准备完成状态',async()=>{
   const calls=[];
   const freeAI={
@@ -29,6 +47,7 @@ test('长 README 会被拆成短段翻译并保存为准备完成状态',async()
     readme,repo:{full_name:'demo/product',default_branch:'main'},release:null,freeAI
   });
   assert.equal(prepared.content_ready,true);
+  assert.equal(prepared.content_pipeline_version,content.CONTENT_PIPELINE_VERSION);
   assert.equal(prepared.translation_status,'translated');
   assert.ok(calls.length>=2);
   assert.match(prepared.readme_markdown,/中文介绍/);
