@@ -266,7 +266,11 @@ async function main() {
               WHERE e.project_full_name_key=p.full_name_key AND e.status='published'),0) DESC,
             CASE WHEN p.payload#>>'{quality_review,status}'='rejected' THEN 0 ELSE 1 END,
             p.last_scanned_at ASC LIMIT ${refreshTarget}`
-      : await db`SELECT full_name_key,payload FROM projects ORDER BY last_scanned_at ASC LIMIT 80`;
+      : await db`
+          SELECT full_name_key,payload FROM projects
+          ORDER BY CASE WHEN COALESCE(payload->>'content_ready','false')<>'true'
+              OR COALESCE((payload->>'content_pipeline_version')::int,0)<>${CONTENT_PIPELINE_VERSION} THEN 0 ELSE 1 END,
+            last_scanned_at ASC LIMIT 80`;
     for (const row of existing) {
       const storedPayload=row.payload;
       if (!storedPayload?.full_name) continue;
