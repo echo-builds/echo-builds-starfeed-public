@@ -28,11 +28,20 @@ function unique(values) { return [...new Set(values.filter(Boolean))]; }
 function hasChinese(value) { return /[㐀-鿿]/.test(String(value || '')); }
 function isCollection(repo,readme='') {
   const text=`${repo.name || ''} ${repo.description || ''} ${readme.slice(0,3000)}`;
-  return /^awesome[-_]/i.test(repo.name || '') || /curated (?:list|collection)|awesome list|resources? list|collection of (?:tools|projects|resources)/i.test(text);
+  return /(^|[-_])awesome([-_]|$)/i.test(repo.name || '') ||
+    /curated (?:list|collection)|awesome list|resources? list|collection of (?:tools|projects|resources)|\b(?:catalog|library) of \d+[,+]?\s*(?:skills|tools|projects|resources)/i.test(text);
 }
 function suspicious(repo) {
   const text=`${repo.name || ''} ${repo.description || ''}`;
   return /pre[- ]?activated|full working installer|trainer tool|skin swapper|password recovery|unlocker|keygen|serial key|all features (?:enabled|preconfigured)|ready to run in 2026|ai--manus|gemini-config-checker/i.test(text);
+}
+function hardRejectReason(repo,readme='') {
+  if (suspicious(repo)) return '疑似破解、解锁或高风险仓库';
+  if (isCollection(repo,readme)) return '资源合集不属于单个可判断的产品项目';
+  const text=`${repo.name || ''} ${repo.description || ''} ${(repo.topics || []).join(' ')} ${readme.slice(0,1200)}`.toLowerCase();
+  const offensiveSecurity=/penetration[- ]testing|\bpentest\b|red[- ]team|bug[- ]bounty|exploit development|offensive security/;
+  if (offensiveSecurity.test(text)) return '纯攻防或渗透测试工具不属于通用 AI 产品经理推荐范围';
+  return '';
 }
 function laneFor(repo) {
   const text=`${repo.name || ''} ${repo.description || ''} ${(repo.topics || []).join(' ')}`.toLowerCase();
@@ -241,7 +250,7 @@ async function main() {
       : new Set();
     const candidates=[];
     const candidateLimit=refreshTarget || (backfillTarget ? Math.min(500,Math.max(220,Math.ceil(backfillTarget*1.5))) : 48);
-    const candidatePool=[...candidateMap.values()].filter(({repo})=>!repo.archived&&!repo.fork&&!suspicious(repo))
+    const candidatePool=[...candidateMap.values()].filter(({repo})=>!repo.archived&&!repo.fork)
       .filter(({repo})=>!backfillTarget || !publishedKeys.has(keyOf(repo)));
     for (const entry of balancedEntries(candidatePool,candidateLimit)) {
       const repo=entry.existing
@@ -255,7 +264,22 @@ async function main() {
       const starVelocity=previous && hours ? starDelta*24/hours : Number(repo.stargazers_count || 0)/Math.max(1,(Date.now()-Date.parse(repo.created_at || 0))/DAY);
       if (!entry.existing && !backfillTarget && !refreshTarget && starVelocity<3 && Number(repo.stargazers_count || 0)<1000) continue;
       const text=await readme(repo);
-      if (text.length<400 || isCollection(repo,text)) continue;
+      const hardReason=hardRejectReason(repo,text);
+      if (hardReason) {
+        if (entry.existing) {
+          const reviewedAt=new Date().toISOString();
+          const qualityReview={status:'rejected',reject_streak:2,last_reason:hardReason,last_reviewed_at:reviewedAt,rule:'deterministic'};
+          await db`
+            UPDATE projects
+            SET payload=jsonb_set(payload,'{quality_review}',${JSON.stringify(qualityReview)}::jsonb,true),
+              last_scanned_at=now(),updated_at=now()
+            WHERE full_name_key=${fullNameKey}`;
+          await db`UPDATE feed_events SET status='removed' WHERE project_full_name_key=${fullNameKey} AND status='published'`;
+          quality.removed_after_repeat++;
+        }
+        continue;
+      }
+      if (text.length<400) continue;
       const release=await github(`/repos/${repo.full_name}/releases/latest`).catch(()=>null);
       candidates.push({...entry,repo,readme:text,release,starVelocity,starDelta,previousSnapshot:previous,isTrending:trending.has(fullNameKey)});
       if (candidates.length >= (refreshTarget || backfillTarget || 24)) break;
@@ -358,4 +382,4 @@ async function main() {
 
 if (require.main===module) main().catch(error=>{ console.error(error); process.exitCode=1; });
 
-module.exports._test={balancedEntries,readmeImages,coverFrom,attentionTag,laneFor,nextQualityReview,shouldRemoveExisting};
+module.exports._test={balancedEntries,readmeImages,coverFrom,attentionTag,laneFor,nextQualityReview,shouldRemoveExisting,isCollection,hardRejectReason};

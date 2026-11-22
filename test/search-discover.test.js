@@ -633,3 +633,25 @@ test('Cloudflare 多语言向量模型批量计算候选语义',async()=>{
   }
 });
 
+test('扫描器确定性排除资源合集与纯攻防项目',()=>{
+  const scan=require('../scripts/scan-feed.cjs')._test;
+  const collection={
+    name:'agentic-awesome-skills',
+    description:'3,000+ reusable AI agent skills with local catalog discovery',
+    topics:['skill-library','ai-agent-skills']
+  };
+  const security={
+    name:'ARTEX',
+    description:'AI autonomous penetration testing system',
+    topics:['penetration-testing','pentest','red-team','bug-bounty']
+  };
+  const product={
+    name:'meeting-notes',
+    description:'Turn meeting recordings into searchable notes and action items',
+    topics:['productivity','ai-assistant']
+  };
+  assert.match(scan.hardRejectReason(collection),/资源合集/);
+  assert.match(scan.hardRejectReason(security),/攻防|渗透测试/);
+  assert.equal(scan.hardRejectReason(product),'');
+});
+
