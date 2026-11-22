@@ -326,6 +326,7 @@ async function main() {
       const quote=clean(decision?.evidence_quote,320);
       const source=`${repo.description || ''}\n${item.readme}`;
       const keep=decision?.keep===true && category && evidenceSupported(source,quote);
+      const retainExistingApproval=item.existing && !decision;
       // A model saying keep=true is not an approval until its quoted evidence
       // is actually present in the repository material.
       const reviewDecision=decision?.keep===true && !keep ? null : decision;
@@ -342,7 +343,7 @@ async function main() {
         } else quality.first_rejections++;
         continue;
       }
-      if (!keep && !cached) continue;
+      if (!keep && !cached && !retainExistingApproval) continue;
       quality.approved++;
       const previousEvents=await db`SELECT event_type,release_payload,published_at FROM feed_events WHERE project_full_name_key=${fullNameKey} AND status='published' ORDER BY id DESC LIMIT 1`;
       const previousEvent=previousEvents[0];
@@ -350,7 +351,7 @@ async function main() {
       let eventKey=`${fullNameKey}:${eventType || 'none'}`;
       let occurredAt=repo.created_at || new Date().toISOString();
       let releasePayload=null;
-      let reason=clean(decision?.reason,220) || (cached ? '已核验的高质量项目' : '值得 AI 产品经理关注的新项目');
+      let reason=clean(decision?.reason,220) || clean(item.storedPayload?.selection_reason,220) || (cached ? '已核验的高质量项目' : '值得 AI 产品经理关注的新项目');
       if (previousEvent && decision?.release_important===true && item.release?.tag_name && item.release?.published_at) {
         const lastPublished=Date.parse(previousEvent.published_at || 0);
         const releasePublished=Date.parse(item.release.published_at || 0);
@@ -363,7 +364,7 @@ async function main() {
           releasePayload={tag_name:item.release.tag_name,published_at:item.release.published_at,name:item.release.name,html_url:item.release.html_url,has_assets:Array.isArray(item.release.assets)&&item.release.assets.length>0};
         }
       }
-      const title=clean(decision?.title,80) || cached?.title || (hasChinese(repo.description) ? repo.name : '');
+      const title=clean(decision?.title,80) || clean(item.storedPayload?.ai_title || item.storedPayload?.title,80) || cached?.title || (hasChinese(repo.description) ? repo.name : '');
       const coverCopy=clean(decision?.cover_copy,120) || cached?.summary || clean(item.storedPayload?.cover_copy || item.storedPayload?.summary,120) || (hasChinese(repo.description) ? clean(repo.description,120) : '');
       if (!title || !coverCopy) continue;
       const fingerprint=sourceFingerprint(item.readme);
@@ -391,7 +392,7 @@ async function main() {
         full_name:repo.full_name,name:repo.name,description:repo.description,stargazers_count:Number(repo.stargazers_count || 0),forks_count:Number(repo.forks_count || 0),topics:repo.topics || [],homepage:repo.homepage,created_at:repo.created_at,updated_at:repo.updated_at,pushed_at:repo.pushed_at,html_url:repo.html_url,license:repo.license,default_branch:repo.default_branch,
         ai_title:title,ai_summary:coverCopy,title,summary:coverCopy,cover_copy:coverCopy,
         cover:coverFrom(item.readme,repo) || stored.cover || null,
-        attention_category:category,evidence_quotes:quote ? [quote] : cached?.evidence ? [cached.evidence] : [],selection_reason:reason,
+        attention_category:category,evidence_quotes:quote ? [quote] : (stored.evidence_quotes || (cached?.evidence ? [cached.evidence] : [])),selection_reason:reason,
         release:releasePayload || stored.release || null,star_velocity_24h:Math.round(item.starVelocity*10)/10,attention_tag:tag,
         quality_review:qualityReview || stored.quality_review || null,
         ...prepared

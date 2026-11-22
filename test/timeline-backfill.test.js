@@ -38,3 +38,10 @@ test('内容迁移优先处理用户最容易看到的顶部项目',()=>{
   assert.match(scanner,/max\(e\.timeline_position\)/);
   assert.match(scanner,/timeline_position[\s\S]+DESC/);
 });
+
+test('已发布项目的内容升级不依赖 AI 重新批准',()=>{
+  assert.match(scanner,/retainExistingApproval=item\.existing && !decision/);
+  assert.match(scanner,/!keep && !cached && !retainExistingApproval/);
+  assert.match(scanner,/storedPayload\?\.ai_title/);
+  assert.match(scanner,/stored\.evidence_quotes/);
+});
