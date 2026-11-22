@@ -206,14 +206,41 @@ function nextQualityReview(previous,decision,reviewedAt=new Date().toISOString()
 function shouldRemoveExisting(review) {
   return review?.status==='rejected' && Number(review.reject_streak || 0)>=2;
 }
+function canRemoveAtFloor(publishedCount,floor=100) {
+  return Number(publishedCount || 0)>floor;
+}
+async function removePublishedIfSafe(db,fullNameKey,floor=100) {
+  const countRows=await db`SELECT COUNT(DISTINCT project_full_name_key)::int AS count FROM feed_events WHERE status='published'`;
+  if (!canRemoveAtFloor(countRows[0]?.count,floor)) return false;
+  const removed=await db`UPDATE feed_events SET status='removed' WHERE project_full_name_key=${fullNameKey} AND status='published' RETURNING id`;
+  return removed.length>0;
+}
+async function cleanupHardRejectedPublished(db,quality) {
+  const rows=await db`
+    SELECT p.full_name_key,p.payload FROM projects p
+    WHERE EXISTS(SELECT 1 FROM feed_events e WHERE e.project_full_name_key=p.full_name_key AND e.status='published')`;
+  const rejected=rows.map(row=>({...row,reason:hardRejectReason(row.payload || {})})).filter(row=>row.reason)
+    .sort((a,b)=>Number(/资源合集/.test(b.reason))-Number(/资源合集/.test(a.reason)) || a.full_name_key.localeCompare(b.full_name_key));
+  for (const row of rejected) {
+    const qualityReview={status:'rejected',reject_streak:2,last_reason:row.reason,last_reviewed_at:new Date().toISOString(),rule:'deterministic'};
+    await db`
+      UPDATE projects
+      SET payload=jsonb_set(payload,'{quality_review}',${JSON.stringify(qualityReview)}::jsonb,true),
+        last_scanned_at=now(),updated_at=now()
+      WHERE full_name_key=${row.full_name_key}`;
+    if (await removePublishedIfSafe(db,row.full_name_key)) quality.removed_after_repeat++;
+    else quality.deferred_at_floor++;
+  }
+}
 async function main() {
   if (!configured()) throw new Error('DATABASE_URL is required');
   const db=sql();
   const runRows=await db`INSERT INTO scan_runs DEFAULT VALUES RETURNING id`;
   const runId=runRows[0].id;
   let published=0;
-  const quality={approved:0,first_rejections:0,removed_after_repeat:0,updated:0,content_ready:0,content_pending:0,with_cover:0,tagged:0};
+  const quality={approved:0,first_rejections:0,removed_after_repeat:0,deferred_at_floor:0,updated:0,content_ready:0,content_pending:0,with_cover:0,tagged:0};
   try {
+    await cleanupHardRejectedPublished(db,quality);
     const trending=await trendingRepos();
     const since=dateKey(new Date(Date.now()-(backfillTarget ? 730 : 90)*DAY));
     const minStars=backfillTarget ? 500 : 50;
@@ -274,8 +301,8 @@ async function main() {
             SET payload=jsonb_set(payload,'{quality_review}',${JSON.stringify(qualityReview)}::jsonb,true),
               last_scanned_at=now(),updated_at=now()
             WHERE full_name_key=${fullNameKey}`;
-          await db`UPDATE feed_events SET status='removed' WHERE project_full_name_key=${fullNameKey} AND status='published'`;
-          quality.removed_after_repeat++;
+          if (await removePublishedIfSafe(db,fullNameKey)) quality.removed_after_repeat++;
+          else quality.deferred_at_floor++;
         }
         continue;
       }
@@ -307,8 +334,8 @@ async function main() {
             last_scanned_at=now(),updated_at=now()
           WHERE full_name_key=${fullNameKey}`;
         if (shouldRemoveExisting(qualityReview)) {
-          await db`UPDATE feed_events SET status='removed' WHERE project_full_name_key=${fullNameKey} AND status='published'`;
-          quality.removed_after_repeat++;
+          if (await removePublishedIfSafe(db,fullNameKey)) quality.removed_after_repeat++;
+          else quality.deferred_at_floor++;
         } else quality.first_rejections++;
         continue;
       }
@@ -382,4 +409,4 @@ async function main() {
 
 if (require.main===module) main().catch(error=>{ console.error(error); process.exitCode=1; });
 
-module.exports._test={balancedEntries,readmeImages,coverFrom,attentionTag,laneFor,nextQualityReview,shouldRemoveExisting,isCollection,hardRejectReason};
+module.exports._test={balancedEntries,readmeImages,coverFrom,attentionTag,laneFor,nextQualityReview,shouldRemoveExisting,isCollection,hardRejectReason,canRemoveAtFloor};

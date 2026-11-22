@@ -655,3 +655,11 @@ test('扫描器确定性排除资源合集与纯攻防项目',()=>{
   assert.equal(scan.hardRejectReason(product),'');
 });
 
+test('推荐库达到一百个后暂停下架，避免清理破坏首批内容量',()=>{
+  const scan=require('../scripts/scan-feed.cjs')._test;
+  assert.equal(scan.canRemoveAtFloor(103),true);
+  assert.equal(scan.canRemoveAtFloor(101),true);
+  assert.equal(scan.canRemoveAtFloor(100),false);
+  assert.equal(scan.canRemoveAtFloor(99),false);
+});
+
