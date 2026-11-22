@@ -197,6 +197,7 @@ async function main() {
   const runRows=await db`INSERT INTO scan_runs DEFAULT VALUES RETURNING id`;
   const runId=runRows[0].id;
   let published=0;
+  const quality={approved:0,first_rejections:0,removed_after_repeat:0,updated:0,content_ready:0,content_pending:0,with_cover:0,tagged:0};
   try {
     const trending=await trendingRepos();
     const since=dateKey(new Date(Date.now()-(backfillTarget ? 730 : 90)*DAY));
@@ -276,10 +277,12 @@ async function main() {
           WHERE full_name_key=${fullNameKey}`;
         if (shouldRemoveExisting(qualityReview)) {
           await db`UPDATE feed_events SET status='removed' WHERE project_full_name_key=${fullNameKey} AND status='published'`;
-        }
+          quality.removed_after_repeat++;
+        } else quality.first_rejections++;
         continue;
       }
       if (!keep && !cached) continue;
+      quality.approved++;
       const previousEvents=await db`SELECT event_type,release_payload,published_at FROM feed_events WHERE project_full_name_key=${fullNameKey} AND status='published' ORDER BY id DESC LIMIT 1`;
       const previousEvent=previousEvents[0];
       let eventType=previousEvent ? null : (backfillTarget ? 'classic' : 'new');
@@ -326,6 +329,11 @@ async function main() {
         ON CONFLICT (full_name_key) DO UPDATE SET
           full_name=EXCLUDED.full_name,github_id=COALESCE(EXCLUDED.github_id,projects.github_id),category=EXCLUDED.category,
           payload=EXCLUDED.payload,last_scanned_at=now(),updated_at=now()`;
+      quality.updated++;
+      if (prepared.content_ready===true) quality.content_ready++;
+      else quality.content_pending++;
+      if (payload.cover) quality.with_cover++;
+      if (tag) quality.tagged++;
       if (!eventType || prepared.content_ready!==true) continue;
       const inserted=await db`
         INSERT INTO feed_events (event_key,project_full_name_key,event_type,occurred_at,selection_reason,release_payload,rank_score,status)
@@ -334,7 +342,7 @@ async function main() {
       if (inserted.length) published++;
     }
     await db`UPDATE scan_runs SET finished_at=now(),status='completed',candidates=${candidates.length},published=${published} WHERE id=${runId}`;
-    console.log(JSON.stringify({candidates:candidates.length,published,backfillTarget,refreshTarget,trending:trending.size}));
+    console.log(JSON.stringify({candidates:candidates.length,classified:decisions.size,published,backfillTarget,refreshTarget,trending:trending.size,quality}));
   } catch(error) {
     await db`UPDATE scan_runs SET finished_at=now(),status='failed',detail=${String(error?.message || error).slice(0,500)} WHERE id=${runId}`.catch(()=>{});
     throw error;

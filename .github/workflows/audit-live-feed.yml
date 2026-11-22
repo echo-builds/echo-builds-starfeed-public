@@ -34,13 +34,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Request public production feed and report first 20 projects
+      - name: Request the public timeline and report its first 20 projects
         shell: bash
         run: |
           node --input-type=module <<'NODE'
-          const url = "https://echo-builds-starfeed.vercel.app/api/discover?page=1";
+          const url = "https://echo-builds-starfeed.vercel.app/api/feed?limit=20";
           console.log("Checking:", url);
-          console.log("Validating Cloudflare Workers AI free path and production homepage");
+          console.log("Validating the same persistent timeline used by the production homepage");
           const response = await fetch(url, {
             headers: {Accept: "application/json", "User-Agent": "RepoScroll-Feed-Audit/1.0"},
             signal: AbortSignal.timeout(120000)
@@ -48,7 +48,6 @@ jobs:
           const body = await response.text();
           console.log("HTTP status:", response.status);
           console.log("Content type:", response.headers.get("content-type"));
-          console.log("Deployment diagnostics included:", Boolean(JSON.parse(body).diagnostics));
           let payload;
           try { payload = JSON.parse(body); }
           catch { throw new Error("Invalid JSON response: " + body.slice(0,400)); }
@@ -57,6 +56,7 @@ jobs:
           const records = payload.items.slice(0,20).map((p,i)=>({
             rank:i+1,
             repo:p.full_name,
+            feed_event_id:p.feed_event_id,
             stars:p.stargazers_count,
             created_at:p.created_at,
             selection_reason:p.selection_reason,
@@ -65,16 +65,18 @@ jobs:
             summary:p.ai_summary,
             original_description:p.description,
             cover:p.cover,
-            evidence_quotes:p.evidence_quotes
+            evidence_quotes:p.evidence_quotes,
+            content_ready:p.content_ready,
+            translation_status:p.translation_status,
+            attention_tag:p.attention_tag
           }));
           console.log("AUDIT_RESULT_START");
           console.log(JSON.stringify({
             count:payload.items.length,
-            classifier:payload.classifier,
-            diagnostics:payload.diagnostics,
             audited_at:new Date().toISOString(),
-            method:payload.method,
-            page:payload.page,
+            source:"persistent_timeline",
+            head_id:payload.head_id,
+            has_more:payload.has_more,
             items:records
           },null,2));
           console.log("AUDIT_RESULT_END");
