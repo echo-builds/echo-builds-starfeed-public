@@ -13,6 +13,29 @@ async function github(path,token,accept) {
   if (!response.ok) throw new Error('github_'+response.status);
   return accept==='application/vnd.github.raw+json'?response.text():response.json();
 }
+function localizedChineseReadmePaths(markdown,repo) {
+  const paths=[];
+  const add=value=>{
+    let candidate=String(value || '').trim().replace(/^<|>$/g,'').split(/[?#]/)[0];
+    try { candidate=decodeURIComponent(candidate); } catch {}
+    const githubPrefix=`https://github.com/${repo.full_name}/blob/${repo.default_branch || 'main'}/`;
+    if (candidate.startsWith(githubPrefix)) candidate=candidate.slice(githubPrefix.length);
+    if (/^https?:\/\//i.test(candidate) || candidate.startsWith('/')) return;
+    candidate=candidate.replace(/^\.\//,'');
+    if (!/readme/i.test(candidate) || !/(?:zh[-_.]?(?:cn|hans)|chinese|简体)/i.test(candidate)) return;
+    if (!paths.includes(candidate)) paths.push(candidate);
+  };
+  for (const match of String(markdown || '').matchAll(/(?:href=["']|\]\()([^"'()\s>]+)/gi)) add(match[1]);
+  return paths;
+}
+async function preferredReadme(repo,primary,token) {
+  for (const path of localizedChineseReadmePaths(primary,repo)) {
+    const encodedPath=path.split('/').map(encodeURIComponent).join('/');
+    const localized=await github(`/repos/${repo.full_name}/contents/${encodedPath}?ref=${encodeURIComponent(repo.default_branch || 'main')}`,token,'application/vnd.github.raw+json').catch(()=>null);
+    if (localized && localized.length>400 && /[㐀-鿿]/.test(localized)) return localized;
+  }
+  return primary;
+}
 function preparedResponse(payload) {
   return {
     repo:payload,
@@ -68,7 +91,8 @@ module.exports=async function handler(req,res) {
       github(`/repos/${fullName}/readme`,token,'application/vnd.github.raw+json'),
       github(`/repos/${fullName}/releases/latest`,token).catch(()=>null)
     ]);
-    const prepared=await prepareProjectContent({readme,repo,release,freeAI});
+    const preferred=await preferredReadme(repo,readme,token);
+    const prepared=await prepareProjectContent({readme:preferred,repo,release,freeAI});
     return res.status(200).json({
       repo,
       experience:prepared.experience || productExperience(repo,release),
@@ -83,4 +107,4 @@ module.exports=async function handler(req,res) {
   }
 };
 
-module.exports._test={preparedResponse};
+module.exports._test={preparedResponse,localizedChineseReadmePaths};
