@@ -15,6 +15,40 @@ test('产品详情只选产品介绍并排除安装和开发章节',()=>{
   assert.doesNotMatch(selected,/Run tests/);
 });
 
+test('开始使用章节及其下级安装说明不会进入产品详情',()=>{
+  const markdown=[
+    '# Pinky','让 Agent 操作手机，关键一步由用户确认。',
+    '## 为什么值得关注','用户可以随时接管，并回看每一步操作。',
+    '## 开始使用','先下载桌面应用。',
+    '### 需要准备什么','准备一根 USB 线。',
+    '### 连接手机','运行配对命令。',
+    '## 安全边界','付款、删除等操作必须先询问用户。',
+    '## 常见问题','连接失败时重新安装驱动。'
+  ].join('\n');
+  const selected=content.selectProductMarkdown(markdown);
+  assert.match(selected,/用户可以随时接管/);
+  assert.match(selected,/付款、删除等操作必须先询问用户/);
+  assert.doesNotMatch(selected,/下载桌面应用/);
+  assert.doesNotMatch(selected,/USB 线/);
+  assert.doesNotMatch(selected,/配对命令/);
+  assert.doesNotMatch(selected,/重新安装驱动/);
+});
+
+test('快速开始和服务配置不会挤进产品介绍',()=>{
+  const markdown=[
+    '# podtran','把英文播客转成中文音频。',
+    '## 产品能力','支持预览、断点恢复和多人配音。',
+    '## 快速开始','podtran run podcast.mp3',
+    '## 选择翻译与配音服务','修改配置文件并填写密钥。',
+    '## 为什么这样设计','先试听五分钟，再决定是否处理完整音频。'
+  ].join('\n');
+  const selected=content.selectProductMarkdown(markdown);
+  assert.match(selected,/支持预览、断点恢复和多人配音/);
+  assert.match(selected,/先试听五分钟/);
+  assert.doesNotMatch(selected,/podtran run/);
+  assert.doesNotMatch(selected,/填写密钥/);
+});
+
 test('产品详情保留自然语言标题下的连续产品叙事',()=>{
   const markdown=[
     '# 岛仔 · Daozai','一座小岛，装下桌面日常。',
