@@ -222,12 +222,19 @@ test('复杂任务同时保留具体证据短语和可核验的核心动作',()=
   assert.ok(checks[2].evidence_terms.includes('synthesis'));
 });
 
-test('复杂需求至少覆盖四成关键能力，防止只命中边缘步骤就被推荐',()=>{
+test('搜索结果必须覆盖大多数核心能力，不能靠边缘步骤入选',()=>{
   assert.equal(search.minimumCapabilityCoverage(1),1);
-  assert.equal(search.minimumCapabilityCoverage(2),.5);
-  assert.equal(search.minimumCapabilityCoverage(4),.4);
-  assert.ok(1 / 4 < search.minimumCapabilityCoverage(4));
-  assert.ok(2 / 5 >= search.minimumCapabilityCoverage(5));
+  assert.equal(search.minimumCapabilityCoverage(2),1);
+  assert.equal(search.minimumCapabilityCoverage(3),2 / 3);
+  assert.equal(search.minimumCapabilityCoverage(4),.6);
+  assert.ok(2 / 4 < search.minimumCapabilityCoverage(4));
+  assert.ok(3 / 5 >= search.minimumCapabilityCoverage(5));
+});
+
+test('证据降级文案只展示已核验能力，不把英文仓库简介塞进卡片',()=>{
+  const summary=search.verifiedSearchSummary(['语音转文字','内容翻译','中文配音'],['说话人识别']);
+  assert.equal(summary,'已核验：语音转文字、内容翻译、中文配音；尚未证明：说话人识别');
+  assert.doesNotMatch(summary,/[A-Za-z]{4,}/);
 });
 
 test('短查询必须命中与原话重合最高的核心能力，派生步骤不能替代用户动作',()=>{
