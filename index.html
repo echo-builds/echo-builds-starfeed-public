@@ -562,7 +562,7 @@ function discoveryResult(item) {
   const repo = enrich({...shape(item),searchResult:true,feedResult:true,url:safeUrl(item.html_url) || `https://github.com/${item.full_name}`});
   const description = String(repo.description || '').trim();
   const chineseDescription = hasChinese(description) ? description : '';
-  const summary = repo.ai_summary || chineseDescription || (description ? `仓库原始说明：${description}` : '');
+  const summary = repo.ai_summary || chineseDescription;
   if (!summary) return null;
   return {...repo,title:repo.ai_title || repo.name,summary,coverText:repo.cover_copy || summary};
 }
