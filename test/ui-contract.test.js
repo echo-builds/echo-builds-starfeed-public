@@ -80,3 +80,10 @@ test('推荐流详情会主动读取 V5 内容并绕开旧失败缓存',()=>{
   assert.match(html,/cache:'no-store'/);
   assert.match(project,/Cache-Control','private, no-store/);
 });
+
+
+test('首页不再展示通用搜索入口',()=>{
+  assert.match(html,/id="search-dock"[^>]*hidden/);
+  assert.match(html,/\$\('#search-dock'\)\.hidden = true/);
+  assert.match(html,/从产品经理视角，发现并看懂值得关注的开源项目/);
+});
