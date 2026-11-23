@@ -586,8 +586,8 @@ async function request(url,options = {}) {
   } finally { clearTimeout(timeout); }
 }
 function shape(item) {
-  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_timeline_position,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,experience} = item;
-  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_timeline_position,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,experience,approximate:false};
+  const {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_timeline_position,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,content_pipeline_version,experience} = item;
+  return {full_name,name,description,stargazers_count,forks_count,topics,homepage,created_at,updated_at,pushed_at,html_url,license,default_branch,ai_title,ai_summary,ai_bullets,selection_reason,release,quality_score,heat_score,attention_category,attention_score,relevance_score,evidence_score,rank_score,cover,cover_copy,attention_tag,feed_event_id,feed_timeline_position,feed_event_type,feed_published_at,star_velocity_24h,content_ready,translation_status,readme_markdown,readme_source_sha,content_prepared_at,content_pipeline_version,experience,approximate:false};
 }
 function credibleRepo(item) {
   const text = `${item.name || ''} ${item.description || ''}`;
@@ -1183,7 +1183,7 @@ function appendExperience(actions,experience) {
   actions.insertBefore(link,actions.querySelector('.save'));
 }
 async function hydrateReadme(repo,body,source,actions) {
-  if (repo.content_ready===true && repo.readme_markdown) {
+  if (repo.content_ready===true && repo.readme_markdown && Number(repo.content_pipeline_version || 0)===4) {
     renderReadmeMarkdown(repo.readme_markdown,body);
     source.textContent=repo.translation_status==='original_chinese'?'README 原文（中文）':'已翻译为中文 · 内容来自项目 README';
     appendExperience(actions,repo.experience);
