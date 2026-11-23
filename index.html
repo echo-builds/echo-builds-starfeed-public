@@ -1183,7 +1183,7 @@ function appendExperience(actions,experience) {
   actions.insertBefore(link,actions.querySelector('.save'));
 }
 async function hydrateReadme(repo,body,source,actions) {
-  if (repo.content_ready===true && repo.readme_markdown && Number(repo.content_pipeline_version || 0)===4) {
+  if (repo.content_ready===true && repo.readme_markdown && Number(repo.content_pipeline_version || 0)===5) {
     renderReadmeMarkdown(repo.readme_markdown,body);
     source.textContent=repo.translation_status==='original_chinese'?'README 原文（中文）':'已翻译为中文 · 内容来自项目 README';
     appendExperience(actions,repo.experience);
@@ -1197,7 +1197,7 @@ async function hydrateReadme(repo,body,source,actions) {
     let response;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        response = await fetch('/api/project?repo=' + encodeURIComponent(repo.full_name) + '&content_version=4',{headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(60000)});
+        response = await fetch('/api/project?repo=' + encodeURIComponent(repo.full_name) + '&content_version=5',{headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(60000)});
         if (response.ok) break;
       } catch (error) {
         if (attempt) throw error;
