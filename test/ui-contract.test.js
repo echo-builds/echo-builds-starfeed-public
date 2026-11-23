@@ -65,3 +65,11 @@ test('README 翻译后保留标题、居中、链接、图片、表格和段落�
   assert.match(html,/readme-inline-image/);
   assert.match(html,/function markdownTableCells/);
 });
+
+
+test('推荐流详情会主动读取 V3 内容并绕开旧失败缓存',()=>{
+  assert.match(html,/正在获取最新中文详情/);
+  assert.match(html,/content_version=3/);
+  assert.match(html,/cache:'no-store'/);
+  assert.match(project,/Cache-Control','private, no-store/);
+});
