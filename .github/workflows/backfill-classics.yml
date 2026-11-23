@@ -1,9 +1,6 @@
 name: Backfill RepoScroll classics
 
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/backfill-classics.yml']
   schedule:
     # 12:43 Asia/Shanghai. Keep this away from the six-hour live scan.
     - cron: '43 4 * * *'
