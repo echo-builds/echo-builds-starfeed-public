@@ -103,20 +103,27 @@ dialog::backdrop{background:#18161280}
 #details figure{margin:14px 0 18px}
 #details figure img{display:block;width:100%;max-height:390px;object-fit:contain;border-radius:10px;background:#f3f1ee}
 #details figcaption{font-size:11px;color:var(--muted);margin-top:4px}
-.readme-body{margin:0 0 24px}
+.readme-body{margin:0 0 24px;overflow-wrap:anywhere}
 .readme-body h3{font-size:20px!important;line-height:1.35;margin:24px 0 8px!important}
+.readme-body h3.readme-title{font-size:28px!important;margin:14px 0 18px!important}
 .readme-body h4{font-size:16px;line-height:1.4;margin:19px 0 6px}
-.readme-body p,.readme-body li{font-size:14px;line-height:1.75}
+.readme-body p,.readme-body li,.readme-body td,.readme-body th{font-size:14px;line-height:1.75}
 .readme-body p{margin:0 0 12px}
+.readme-body a{color:#0969da;text-decoration:underline;text-underline-offset:2px}
+.readme-body strong{font-weight:750}
+.readme-body sub{display:inline-block;color:var(--muted);font-size:11px;line-height:1.55}
+.readme-body .readme-center{text-align:center}
+.readme-body .readme-media{margin:18px auto}
+.readme-body .readme-inline-image{display:block;max-width:100%;height:auto;margin:0 auto 8px;border-radius:10px;background:#f3f1ee}
 .readme-body ul,.readme-body ol{padding-left:1.35em;margin:0 0 14px}
+.readme-body blockquote{margin:0 0 14px;padding:2px 0 2px 13px;border-left:3px solid var(--rule);color:var(--muted)}
 .readme-body pre{overflow:auto;padding:13px;border-radius:9px;background:#f4f1ed;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+.readme-body code{font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f4f1ed;border-radius:4px;padding:1px 4px}
+.readme-body pre code{background:transparent;padding:0}
 .readme-body figure{margin:18px 0!important}
-.readme-body .table-scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--rule);border-radius:10px}
-.readme-body table{width:100%;border-collapse:collapse;background:#fff;font-size:14px;line-height:1.55}
-.readme-body th,.readme-body td{min-width:140px;padding:10px 12px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
-.readme-body th{background:#f7f4f0;font-weight:750}
-.readme-body tr:last-child td{border-bottom:0}
-.readme-body th:last-child,.readme-body td:last-child{border-right:0}
+.readme-body .readme-table{display:block;width:100%;overflow-x:auto;border-collapse:collapse;margin:0 0 18px}
+.readme-body .readme-table th,.readme-body .readme-table td{min-width:220px;padding:10px;vertical-align:top;border:1px solid var(--rule)}
+.readme-body .readme-table img{display:block;width:100%;height:auto;margin:0 0 7px;border-radius:8px}
 .readme-body .loading-copy{color:var(--muted)}
 .readme-source{font-size:12px;color:var(--muted);margin-top:-10px}
 .readme-source a{text-decoration:underline;text-underline-offset:2px}
@@ -513,7 +520,6 @@ const state = {
   timelineAvailable:null,
   newCount:0,
   feedHead:null,
-  returnEventId:null,
   restorePending:true,
   restorePages:0,
   lastFetch:0,
@@ -879,14 +885,6 @@ function section(heading,content) {
   }
   return section;
 }
-function markdownText(value) {
-  return String(value || '')
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g,'$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1')
-    .replace(/[*_~`]/g,'')
-    .replace(/<[^>]+>/g,'')
-    .trim();
-}
 function markdownTableCells(value) {
   const line=String(value || '').trim();
   if (!line.includes('|')) return null;
@@ -920,16 +918,131 @@ function markdownLines(markdown) {
   }
   return result;
 }
+function createReadmeImage(src,alt,width) {
+  const url = safeUrl(src);
+  if (!url) return null;
+  const img = document.createElement('img');
+  img.className = 'readme-inline-image';
+  img.loading = 'lazy';
+  img.alt = alt || '项目界面';
+  img.src = url;
+  const requested = Number.parseInt(width,10);
+  if (Number.isFinite(requested) && requested > 0) img.style.width = Math.min(requested,1000) + 'px';
+  return img;
+}
+function appendMarkdownInline(parent,value) {
+  const source = String(value || '');
+  const pattern = /(!?\[([^\]]*)\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)|\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`)/g;
+  let cursor = 0;
+  for (const match of source.matchAll(pattern)) {
+    if (match.index > cursor) parent.append(document.createTextNode(source.slice(cursor,match.index)));
+    if (match[3]) {
+      if (match[1].startsWith('!')) {
+        const img = createReadmeImage(match[3],match[2]);
+        if (img) parent.append(img);
+      } else {
+        const url = safeUrl(match[3]);
+        if (url) {
+          const link = document.createElement('a');
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noreferrer';
+          link.textContent = match[2];
+          parent.append(link);
+        } else parent.append(document.createTextNode(match[2]));
+      }
+    } else if (match[4] || match[5]) {
+      const strong = document.createElement('strong');
+      strong.textContent = match[4] || match[5];
+      parent.append(strong);
+    } else {
+      const code = document.createElement('code');
+      code.textContent = match[6];
+      parent.append(code);
+    }
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < source.length) parent.append(document.createTextNode(source.slice(cursor)));
+}
+function appendReadmeHtml(html,target) {
+  const parsed = new DOMParser().parseFromString('<body>' + html + '</body>','text/html').body;
+  const copy = (source,parent)=>{
+    if (source.nodeType === 3) {
+      parent.append(document.createTextNode(source.textContent || ''));
+      return;
+    }
+    if (source.nodeType !== 1) return;
+    const tag = source.tagName.toLowerCase();
+    if (['script','style','iframe','object','embed','svg'].includes(tag)) return;
+    if (tag === 'img') {
+      const img = createReadmeImage(source.getAttribute('src'),source.getAttribute('alt'),source.getAttribute('width'));
+      if (img) parent.append(img);
+      return;
+    }
+    let output;
+    if (tag === 'a') {
+      const url = safeUrl(source.getAttribute('href'));
+      if (!url) {
+        for (const child of source.childNodes) copy(child,parent);
+        return;
+      }
+      output = document.createElement('a');
+      output.href = url;
+      output.target = '_blank';
+      output.rel = 'noreferrer';
+    } else if (tag === 'b' || tag === 'strong') output = document.createElement('strong');
+    else if (tag === 'i' || tag === 'em') output = document.createElement('em');
+    else if (/^h[1-4]$/.test(tag)) {
+      output = document.createElement(Number(tag[1]) <= 2 ? 'h3' : 'h4');
+      if (tag === 'h1') output.classList.add('readme-title');
+    } else if (['p','div','span','code','sub','sup','br','ul','ol','li','table','thead','tbody','tr','td','th','blockquote','details','summary'].includes(tag)) {
+      output = document.createElement(tag);
+    } else {
+      for (const child of source.childNodes) copy(child,parent);
+      return;
+    }
+    if (/^center$/i.test(source.getAttribute('align') || '')) output.classList.add('readme-center');
+    if (tag === 'table') output.classList.add('readme-table');
+    for (const child of source.childNodes) copy(child,output);
+    if (output.tagName === 'P' && output.querySelector('img')) output.classList.add('readme-media');
+    parent.append(output);
+  };
+  const fragment = document.createDocumentFragment();
+  for (const child of parsed.childNodes) copy(child,fragment);
+  target.append(fragment);
+}
 function renderReadmeMarkdown(markdown,node) {
   node.replaceChildren();
   const lines = markdownLines(markdown);
   let list = null;
   let code = null;
+  let paragraphLines = [];
+  let htmlBlock = null;
+  let htmlClosingTag = '';
   const closeList = ()=>{ list = null; };
+  const flushParagraph = ()=>{
+    if (!paragraphLines.length) return;
+    const paragraph = document.createElement('p');
+    appendMarkdownInline(paragraph,paragraphLines.join(' '));
+    if (paragraph.childNodes.length) node.append(paragraph);
+    paragraphLines = [];
+  };
+  const flushHtml = ()=>{
+    if (!htmlBlock) return;
+    appendReadmeHtml(htmlBlock.join('\n'),node);
+    htmlBlock = null;
+    htmlClosingTag = '';
+  };
   for (let index=0;index<lines.length;index++) {
     const raw=lines[index];
     const line = raw.trim();
+    if (htmlBlock) {
+      htmlBlock.push(raw);
+      if (new RegExp('</' + htmlClosingTag + '>','i').test(line)) flushHtml();
+      continue;
+    }
     if (/^```/.test(line)) {
+      flushParagraph();
       closeList();
       if (code) { node.append(code); code = null; }
       else { code = document.createElement('pre'); code.append(document.createElement('code')); }
@@ -939,10 +1052,15 @@ function renderReadmeMarkdown(markdown,node) {
       code.firstElementChild.textContent += raw + '\n';
       continue;
     }
-    if (!line) { closeList(); continue; }
+    if (!line) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
     const headerCells=markdownTableCells(line);
-    const dividerCells=markdownTableCells(lines[index+1]);
+    const dividerCells=markdownTableCells(lines[index+1] || '');
     if (headerCells && dividerCells && headerCells.length===dividerCells.length && markdownTableDivider(dividerCells)) {
+      flushParagraph();
       closeList();
       const wrapper=document.createElement('div');
       wrapper.className='table-scroll';
@@ -951,7 +1069,7 @@ function renderReadmeMarkdown(markdown,node) {
       const headRow=document.createElement('tr');
       for (const value of headerCells) {
         const cell=document.createElement('th');
-        cell.textContent=markdownText(value);
+        appendMarkdownInline(cell,value);
         headRow.append(cell);
       }
       thead.append(headRow);
@@ -964,7 +1082,7 @@ function renderReadmeMarkdown(markdown,node) {
         const row=document.createElement('tr');
         for (let column=0;column<headerCells.length;column++) {
           const cell=document.createElement('td');
-          cell.textContent=markdownText(rowCells[column] || '');
+          appendMarkdownInline(cell,rowCells[column] || '');
           row.append(cell);
         }
         tbody.append(row);
@@ -976,47 +1094,83 @@ function renderReadmeMarkdown(markdown,node) {
       node.append(wrapper);
       continue;
     }
+    const blockStart = line.match(/^<(table|details)\b/i);
+    if (blockStart && !new RegExp('</' + blockStart[1] + '>','i').test(line)) {
+      flushParagraph();
+      closeList();
+      htmlBlock = [raw];
+      htmlClosingTag = blockStart[1];
+      continue;
+    }
+    if (/^<[^>]+>/.test(line)) {
+      flushParagraph();
+      closeList();
+      appendReadmeHtml(raw,node);
+      continue;
+    }
     const image = line.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)(?:\s+["'][^"']*["'])?\)$/i);
-    const htmlImage = line.match(/^<img\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["'][^>]*>/i);
-    if (image || htmlImage) {
+    if (image) {
+      flushParagraph();
       closeList();
       const figure = document.createElement('figure');
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.alt = image?.[1] || '项目界面';
-      img.src = image?.[2] || htmlImage[1];
+      const img = createReadmeImage(image[2],image[1]);
+      if (!img) continue;
+      img.classList.remove('readme-inline-image');
       img.onerror = ()=>figure.remove();
       figure.append(img);
-      if (image?.[1]) { const caption=document.createElement('figcaption'); caption.textContent=image[1]; figure.append(caption); }
+      if (image[1]) {
+        const caption = document.createElement('figcaption');
+        caption.textContent = image[1];
+        figure.append(caption);
+      }
       node.append(figure);
       continue;
     }
     const heading = line.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
+      flushParagraph();
       closeList();
       const level = heading[1].length <= 2 ? 'h3' : 'h4';
       const title = document.createElement(level);
-      title.textContent = markdownText(heading[2]);
+      if (heading[1].length === 1) title.classList.add('readme-title');
+      appendMarkdownInline(title,heading[2]);
       node.append(title);
       continue;
     }
     const bullet = line.match(/^[-*+]\s+(.+)$/);
     const ordered = line.match(/^\d+[.)]\s+(.+)$/);
     if (bullet || ordered) {
+      flushParagraph();
       const kind = ordered ? 'ol' : 'ul';
-      if (!list || list.tagName.toLowerCase() !== kind) { list = document.createElement(kind); node.append(list); }
+      if (!list || list.tagName.toLowerCase() !== kind) {
+        list = document.createElement(kind);
+        node.append(list);
+      }
       const item = document.createElement('li');
-      item.textContent = markdownText((bullet || ordered)[1]);
+      appendMarkdownInline(item,(bullet || ordered)[1]);
       list.append(item);
       continue;
     }
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      flushParagraph();
+      closeList();
+      const blockquote = document.createElement('blockquote');
+      appendMarkdownInline(blockquote,quote[1]);
+      node.append(blockquote);
+      continue;
+    }
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      flushParagraph();
+      closeList();
+      node.append(document.createElement('hr'));
+      continue;
+    }
     closeList();
-    const text = markdownText(line).replace(/^&emsp;$/i,'');
-    if (!text) continue;
-    const paragraph = document.createElement('p');
-    paragraph.textContent = text;
-    node.append(paragraph);
+    paragraphLines.push(line);
   }
+  flushParagraph();
+  flushHtml();
   if (code) node.append(code);
 }
 function appendExperience(actions,experience) {
@@ -1209,8 +1363,8 @@ function observeCards(feed) {
 }
 function updateNewProjectsButton() {
   const button=$('#new-projects');
-  button.textContent=state.returnEventId ? '回到上次阅读处' : state.newCount ? `有 ${state.newCount} 个新项目` : '';
-  button.hidden=state.view!=='discover' || (!state.returnEventId && state.newCount<1);
+  button.textContent=state.newCount ? `有 ${state.newCount} 个新项目` : '';
+  button.hidden=state.view!=='discover' || state.newCount<1;
 }
 function restoreReadingPosition() {
   if (!state.restorePending || state.newCount<1 && !state.progress.resume_event_id) return;
@@ -1432,14 +1586,8 @@ $('#project-search').addEventListener('input',event=>{ $('#search-clear').hidden
 $('#search-clear').addEventListener('click',()=>{ go('discover'); $('#project-search').focus(); });
 $('#empty button').addEventListener('click',()=>go('discover'));
 $('#new-projects').addEventListener('click',()=>{
-  if (state.returnEventId) {
-    const target=document.querySelector(`[data-feed-event="${Number(state.returnEventId)}"]`);
-    state.returnEventId=null;
-    updateNewProjectsButton();
-    target?.scrollIntoView({block:'start',behavior:'smooth'});
-    return;
-  }
-  state.returnEventId=Number(state.progress.resume_event_id || 0) || null;
+  state.newCount=0;
+  if (state.feedHead) saveProgress({latest:state.feedHead});
   updateNewProjectsButton();
   window.scrollTo({top:0,behavior:'smooth'});
 });
