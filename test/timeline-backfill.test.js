@@ -24,7 +24,7 @@ test('历史回填不会触发新项目提示',()=>{
 test('每天后台审核一批历史经典项目',()=>{
   assert.match(workflow,/cron: '43 4 \* \* \*'/);
   assert.match(workflow,/--backfill=/);
-  assert.match(workflow,/default: '20'/);
+  assert.match(workflow,/default: '200'/);
 });
 
 test('内容升级失败时保留上一个可读版本并小批量重试',()=>{
