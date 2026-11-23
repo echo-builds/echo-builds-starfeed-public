@@ -1,7 +1,7 @@
 const {getSession,refreshSession,setSession} = require('./_lib/session');
 const {configured,sql} = require('./_lib/db');
 const freeAI = require('./_lib/free-ai');
-const {prepareProjectContent,productExperience} = require('./_lib/project-content');
+const {prepareProjectContent,productExperience,CONTENT_PIPELINE_VERSION} = require('./_lib/project-content');
 
 const GITHUB_API='https://api.github.com';
 
@@ -67,10 +67,17 @@ module.exports=async function handler(req,res) {
 
   try {
     const stored=await storedProject(fullName);
-    if (stored?.payload?.content_ready===true) return res.status(200).json(preparedResponse(stored.payload));
-    // Published recommendations are prepared by the scanner. Never make the
-    // reader wait for a live translation or expose a long untranslated README.
-    if (stored?.published) return res.status(200).json(preparedResponse(stored.payload));
+    const preparedWithCurrentPipeline=Number(stored?.payload?.content_pipeline_version || 0)===CONTENT_PIPELINE_VERSION;
+    if (preparedWithCurrentPipeline && stored?.payload?.content_ready===true) {
+      return res.status(200).json(preparedResponse(stored.payload));
+    }
+    // Published recommendations are prepared by the scanner. Only reuse their
+    // stored detail when it was prepared by the current content rules. Older
+    // payloads must be rebuilt on demand so a deploy cannot keep serving stale
+    // setup, API or contribution sections until the next background scan.
+    if (preparedWithCurrentPipeline && stored?.published) {
+      return res.status(200).json(preparedResponse(stored.payload));
+    }
   } catch {
     // Database outages must not break on-demand project details from search.
   }
