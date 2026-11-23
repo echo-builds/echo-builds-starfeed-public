@@ -71,7 +71,9 @@ module.exports=async function handler(req,res) {
     if (preparedWithCurrentPipeline && stored?.payload?.content_ready===true) {
       return res.status(200).json(preparedResponse(stored.payload));
     }
-    // Published recommendations are prepared by the scanner. Only reuse their
+    // Published recommendations are prepared by the scanner. Never make the
+    // reader wait for live translation when a current prepared payload exists.
+    // Only reuse their
     // stored detail when it was prepared by the current content rules. Older
     // payloads must be rebuilt on demand so a deploy cannot keep serving stale
     // setup, API or contribution sections until the next background scan.
