@@ -26,6 +26,7 @@ test('推荐流详情优先使用数据库预处理中文，不再现场展示�
   assert.match(project,/stored\?\.payload\?\.content_ready===true/);
   assert.match(project,/Never make the/);
   assert.match(html,/repo\.content_ready===true && repo\.readme_markdown/);
+  assert.match(html,/Number\(repo\.content_pipeline_version \|\| 0\)===4/);
   assert.match(html,/中文详情正在后台准备/);
   assert.doesNotMatch(html,/当前显示 README 原文（中文翻译暂不可用）/);
   assert.doesNotThrow(()=>new Function('require','module','exports',project));
