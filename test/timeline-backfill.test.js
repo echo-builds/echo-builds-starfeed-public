@@ -49,3 +49,9 @@ test('已发布项目的内容升级不依赖 AI 重新批准',()=>{
 test('六小时常规扫描优先补齐缺失或旧版详情',()=>{
   assert.match(scanner,/SELECT full_name_key,payload FROM projects[\s\S]+content_ready[\s\S]+content_pipeline_version[\s\S]+last_scanned_at ASC LIMIT 80/);
 });
+
+
+test('历史补库分类服务不可用时明确失败，不伪装成成功',()=>{
+  assert.match(scanner,/backfill_classifier_unavailable/);
+  assert.match(scanner,/backfillTarget && candidates\.length && decisions\.size===0/);
+});
