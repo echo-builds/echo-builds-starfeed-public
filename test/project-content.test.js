@@ -34,6 +34,25 @@ test('开始使用章节及其下级安装说明不会进入产品详情',()=>{
   assert.doesNotMatch(selected,/重新安装驱动/);
 });
 
+test('README 顶部导航和使用手册不会重复出现在产品详情',()=>{
+  const markdown=[
+    '<p align="center"><img src="hero.png"></p>',
+    '<h1 align="center">Pinky</h1>',
+    '<p align="center"><a href="#start">下载</a> · <a href="#faq">常见问题</a></p>',
+    '<p align="center"><a href="README.md">English</a> · 简体中文</p>',
+    '让 Agent 操作手机，风险步骤由用户确认。',
+    '## 使用 Pinky','这里是连接手机、填写密钥和运行命令的长篇操作手册。',
+    '## 产品边界','付款和删除必须经过用户批准。'
+  ].join('\n');
+  const selected=content.selectProductMarkdown(markdown);
+  assert.match(selected,/hero\.png/);
+  assert.match(selected,/风险步骤由用户确认/);
+  assert.match(selected,/付款和删除必须经过用户批准/);
+  assert.doesNotMatch(selected,/常见问题<\/a>/);
+  assert.doesNotMatch(selected,/English<\/a>/);
+  assert.doesNotMatch(selected,/长篇操作手册/);
+});
+
 test('快速开始和服务配置不会挤进产品介绍',()=>{
   const markdown=[
     '# podtran','把英文播客转成中文音频。',
