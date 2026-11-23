@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="RepoScroll">
-  <meta name="description" content="发现值得 AI 产品经理关注的开源产品、工具与技术变化。">
+  <meta name="description" content="从产品经理视角发现并看懂值得关注的开源产品、工具与技术变化。">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -30,7 +30,7 @@ a{color:inherit;text-decoration:none}
 .header-actions{display:flex;align-items:center;gap:2px}
 .account{border:1px solid var(--rule);background:#fff;border-radius:18px;padding:6px 11px;font-size:12px;font-weight:700;max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .account.connected{border-color:#c9dfc7;background:#f2f8f0;color:#35603b}
-main{max-width:1080px;margin:auto;padding:20px 12px calc(148px + env(safe-area-inset-bottom))}
+main{max-width:1080px;margin:auto;padding:20px 12px calc(88px + env(safe-area-inset-bottom))}
 .heading{padding:0 3px 14px}
 .heading.discover-heading h1{display:none}
 .heading.discover-heading{padding-top:2px}
@@ -147,7 +147,7 @@ dialog::backdrop{background:#18161280}
 .install-panel{padding:26px 24px 30px}
 .install-panel h2{margin:0 0 8px;font-size:25px}
 .install-panel p{margin:0 0 12px;color:var(--muted)}
-@media(min-width:620px){main{padding:25px 22px 154px}.search-dock{width:min(560px,calc(100% - 40px))}.feed{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card-copy{padding-inline:11px}.card-meta{padding-inline:11px}dialog{border-radius:17px;margin:auto;width:min(650px,calc(100vw - 60px));max-height:88vh;height:auto}#details{padding:25px 25px 28px}}
+@media(min-width:620px){main{padding:25px 22px 90px}.search-dock{width:min(560px,calc(100% - 40px))}.feed{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card-copy{padding-inline:11px}.card-meta{padding-inline:11px}dialog{border-radius:17px;margin:auto;width:min(650px,calc(100vw - 60px));max-height:88vh;height:auto}#details{padding:25px 25px 28px}}
 @media(min-width:950px){.header-inner{max-width:1180px;height:64px;padding-inline:24px;justify-content:flex-start;gap:18px}.top-nav{display:flex}.header-actions{margin-left:auto}.feed{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 15px}.text-cover{padding:16px}.card-copy h2{font-size:16px}.card{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.card:hover{transform:translateY(-3px);border-color:#ddd2c8;box-shadow:0 12px 30px #38281914}main{max-width:1180px;padding:34px 24px 80px}.heading{padding-bottom:20px}.heading h1{font-size:38px}.search-dock{top:9px;bottom:auto;width:min(390px,34vw);padding:0;z-index:4}.search-dock form{min-height:46px;box-shadow:none;background:#fff}.bottom{display:none}dialog{width:min(720px,calc(100vw - 80px));box-shadow:0 30px 90px #18161238}#details{padding:30px 32px 34px}}
 
 .feed.masonry{grid-auto-rows:1px;row-gap:0}
@@ -179,7 +179,7 @@ dialog::backdrop{background:#18161280}
   <main>
     <section class="heading">
       <h1 id="heading">推荐</h1>
-      <p id="lede">发现值得 AI 产品经理关注的开源产品、工具与技术变化</p>
+      <p id="lede">从产品经理视角，发现并看懂值得关注的开源项目</p>
     </section>
     <p id="status" class="status" role="status" hidden></p>
     <button id="new-projects" class="new-projects" type="button" hidden></button>
@@ -188,7 +188,7 @@ dialog::backdrop{background:#18161280}
     <div id="groups" hidden></div>
     <section id="empty" class="empty" hidden><h2></h2><p></p><button class="primary" type="button" hidden>看看推荐</button></section>
   </main>
-  <section class="search-dock" id="search-dock" aria-label="搜索 GitHub 项目">
+  <section class="search-dock" id="search-dock" aria-label="搜索 GitHub 项目" hidden>
     <form id="search-form" role="search">
       <label class="sr-only" for="project-search">描述你想找的 GitHub 项目</label>
       <input id="project-search" type="search" autocomplete="off" enterkeyhint="search" placeholder="告诉我你想找什么项目">
@@ -1392,9 +1392,9 @@ function render() {
   const headingWrap = document.querySelector('.heading');
   headingWrap.classList.toggle('discover-heading',!savedView && !searchView);
   $('#heading').textContent = savedView ? '收藏' : searchView ? '搜索结果' : '';
-  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? '' : '发现值得 AI 产品经理关注的开源产品、工具与技术变化';
+  $('#lede').textContent = savedView ? '按主题回看收藏过的项目' : searchView ? '' : '从产品经理视角，发现并看懂值得关注的开源项目';
   $('#lede').hidden = searchView;
-  $('#search-dock').hidden = savedView;
+  $('#search-dock').hidden = true;
   for (const tab of document.querySelectorAll('[data-view]')) {
     if (tab.dataset.view === state.view || (searchView && tab.dataset.view === 'discover')) tab.setAttribute('aria-current','page'); else tab.removeAttribute('aria-current');
   }
