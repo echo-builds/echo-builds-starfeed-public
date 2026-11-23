@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const CONTENT_PIPELINE_VERSION = 2;
+const CONTENT_PIPELINE_VERSION = 3;
 
 function isMostlyChinese(text) {
   const sample = String(text || '')
@@ -47,12 +47,22 @@ function selectProductMarkdown(markdown,maxChars=24000) {
   return kept.join('\n').replace(/<[^>]*$/,'').replace(/(?:\n\s*){3,}/g,'\n\n').trim();
 }
 
-function resolveImages(markdown,repo) {
+function resolveReadmeUrls(markdown,repo) {
   const branch=repo.default_branch || 'main';
-  const base=`https://raw.githubusercontent.com/${repo.full_name}/${branch}/`;
+  const rawBase=`https://raw.githubusercontent.com/${repo.full_name}/${branch}/`;
+  const repoBase=`https://github.com/${repo.full_name}`;
+  const imageUrl=value=>/^https?:\/\//i.test(value)?value:rawBase+value.replace(/^\.\//,'').replace(/^\//,'');
+  const linkUrl=value=>{
+    if (/^https?:\/\//i.test(value)) return value;
+    if (value.startsWith('#')) return repoBase+value;
+    if (value.startsWith('/')) return 'https://github.com'+value;
+    return `${repoBase}/blob/${branch}/`+value.replace(/^\.\//,'');
+  };
   return String(markdown || '')
-    .replace(/(!\[[^\]]*\]\()([^)\s]+)(\))/g,(all,start,url,end)=>start+(/^https?:\/\//i.test(url)?url:base+url.replace(/^\.\//,''))+end)
-    .replace(/(<img\b[^>]*\bsrc=["'])([^"']+)(["'])/gi,(all,start,url,end)=>start+(/^https?:\/\//i.test(url)?url:base+url.replace(/^\.\//,''))+end);
+    .replace(/(!\[[^\]]*\]\()([^)\s]+)(\))/g,(all,start,url,end)=>start+imageUrl(url)+end)
+    .replace(/(<img\b[^>]*\bsrc=["'])([^"']+)(["'])/gi,(all,start,url,end)=>start+imageUrl(url)+end)
+    .replace(/(\[[^\]]+\]\()([^)\s]+)(\))/g,(all,start,url,end)=>start+linkUrl(url)+end)
+    .replace(/(<a\b[^>]*\bhref=["'])([^"']+)(["'])/gi,(all,start,url,end)=>start+linkUrl(url)+end);
 }
 
 function sourceFingerprint(markdown) {
@@ -110,7 +120,7 @@ async function translateMarkdown(markdown,freeAI) {
   const translated=[];
   for (let index=0;index<chunks.length;index++) {
     const result=await freeAI.generate([
-      {role:'system',content:'你是忠实的 GitHub README 中文翻译器。只翻译正文，不总结、不扩写、不评价。保留 Markdown 标题层级、列表、图片、链接、命令、专有名词和代码。Markdown 表格必须保持原列数、竖线和分隔行，每个表格行只占一行，表格行之间不要插入空行。不要添加开场或结尾。'},
+      {role:'system',content:'你是忠实的 GitHub README 中文翻译器。只翻译读者能看到的自然语言，不总结、不扩写、不评价。项目名、产品名和专有名词保持原文。严格原样保留 Markdown 标题层级、列表、图片、链接、命令和代码，以及所有 HTML 标签、属性、URL、锚点、对齐方式和嵌套结构；不要把 HTML 改写成纯文本。Markdown 表格必须保持原列数、竖线和分隔行，每个表格行只占一行，表格行之间不要插入空行。不要添加开场或结尾。'},
       {role:'user',content:`这是第 ${index+1}/${chunks.length} 段：\n\n${chunks[index]}`}
     ],{json:false,temperature:0,maxTokens:1600,timeoutMs:25000});
     if (!result || !/[㐀-鿿]/.test(result)) throw new Error('translation_missing_chinese');
@@ -121,7 +131,7 @@ async function translateMarkdown(markdown,freeAI) {
 
 async function prepareProjectContent({readme,repo,release,freeAI}) {
   const fingerprint=sourceFingerprint(readme);
-  const selected=resolveImages(selectProductMarkdown(readme),repo);
+  const selected=resolveReadmeUrls(selectProductMarkdown(readme),repo);
   const base={
     content_pipeline_version:CONTENT_PIPELINE_VERSION,
     readme_source_sha:fingerprint,
@@ -141,6 +151,6 @@ async function prepareProjectContent({readme,repo,release,freeAI}) {
 
 module.exports={
   CONTENT_PIPELINE_VERSION,
-  isMostlyChinese,sections,selectProductMarkdown,resolveImages,sourceFingerprint,markdownChunks,
+  isMostlyChinese,sections,selectProductMarkdown,resolveReadmeUrls,resolveImages:resolveReadmeUrls,sourceFingerprint,markdownChunks,
   productExperience,translateMarkdown,prepareProjectContent
 };
