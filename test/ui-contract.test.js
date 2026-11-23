@@ -26,7 +26,7 @@ test('推荐流详情优先使用数据库预处理中文，不再现场展示�
   assert.match(project,/stored\?\.payload\?\.content_ready===true/);
   assert.match(project,/Never make the/);
   assert.match(html,/repo\.content_ready===true && repo\.readme_markdown/);
-  assert.match(html,/Number\(repo\.content_pipeline_version \|\| 0\)===4/);
+  assert.match(html,/Number\(repo\.content_pipeline_version \|\| 0\)===5/);
   assert.match(html,/中文详情正在后台准备/);
   assert.doesNotMatch(html,/当前显示 README 原文（中文翻译暂不可用）/);
   assert.doesNotThrow(()=>new Function('require','module','exports',project));
@@ -74,9 +74,9 @@ test('README 翻译后保留标题、居中、链接、图片、表格和段落�
 });
 
 
-test('推荐流详情会主动读取 V3 内容并绕开旧失败缓存',()=>{
+test('推荐流详情会主动读取 V5 内容并绕开旧失败缓存',()=>{
   assert.match(html,/正在获取最新中文详情/);
-  assert.match(html,/content_version=4/);
+  assert.match(html,/content_version=5/);
   assert.match(html,/cache:'no-store'/);
   assert.match(project,/Cache-Control','private, no-store/);
 });
