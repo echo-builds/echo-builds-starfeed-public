@@ -35,7 +35,7 @@ function selectProductMarkdown(markdown,maxChars=24000) {
     .replace(/<p\b[^>]*align=["']center["'][^>]*>[\s\S]*?<\/p>/gi,block=>{
       const linkCount=(block.match(/<a\b/gi) || []).length;
       const visible=block.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-      return linkCount>=2 && /(下载|开始使用|常见问题|discord|english|简体中文|日本語|türkçe|documentation|docs)/i.test(visible) ? '' : block;
+      return linkCount>=1 && /(下载|开始使用|常见问题|discord|english|简体中文|日本語|türkçe|documentation|docs)/i.test(visible) ? '' : block;
     })
     .replace(/(?:\n\s*){3,}/g,'\n\n');
   const all = sections(cleaned);
