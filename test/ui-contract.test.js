@@ -48,3 +48,20 @@ test('README 表格按真实表格渲染并兼容行间空行',()=>{
   assert.match(html,/document\.createElement\('table'\)/);
   assert.match(html,/className='table-scroll'/);
 });
+
+
+test('查看新项目后回到顶部，按钮进入无按钮状态',()=>{
+  assert.doesNotMatch(html,/returnEventId/);
+  assert.match(html,/button\.textContent=state\.newCount \? `有 \$\{state\.newCount\} 个新项目` : ''/);
+  assert.match(html,/state\.newCount=0/);
+});
+
+test('README 翻译后保留标题、居中、链接、图片、表格和段落结构',()=>{
+  assert.match(html,/function appendReadmeHtml/);
+  assert.match(html,/new DOMParser\(\)/);
+  assert.match(html,/classList\.add\('readme-center'\)/);
+  assert.match(html,/classList\.add\('readme-table'\)/);
+  assert.match(html,/function appendMarkdownInline/);
+  assert.match(html,/readme-inline-image/);
+  assert.match(html,/function markdownTableCells/);
+});
