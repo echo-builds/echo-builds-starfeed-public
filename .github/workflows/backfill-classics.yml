@@ -1,6 +1,9 @@
 name: Backfill RepoScroll classics
 
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/backfill-classics.yml']
   schedule:
     # 12:43 Asia/Shanghai. Keep this away from the six-hour live scan.
     - cron: '43 4 * * *'
@@ -9,7 +12,7 @@ on:
       target:
         description: 'Number of historical candidates to review'
         required: false
-        default: '20'
+        default: '200'
 
 concurrency:
   group: reposcroll-feed-scan
@@ -32,7 +35,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Review and append historical classics
-        run: node scripts/scan-feed.cjs --backfill="${{ inputs.target || '20' }}"
+        run: node scripts/scan-feed.cjs --backfill="${{ inputs.target || '200' }}"
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GITHUB_API_TOKEN: ${{ github.token }}
