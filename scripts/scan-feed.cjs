@@ -343,6 +343,7 @@ async function main() {
       if (candidates.length >= (refreshTarget || backfillTarget || 24)) break;
     }
     const decisions=await classify(candidates).catch(()=>new Map());
+    if (backfillTarget && candidates.length && decisions.size===0) throw new Error('backfill_classifier_unavailable');
     const publishOrder=[...candidates].sort((a,b)=>(initialScore(a.repo)+a.starVelocity)-(initialScore(b.repo)+b.starVelocity));
     for (const item of publishOrder) {
       const repo=item.repo;
