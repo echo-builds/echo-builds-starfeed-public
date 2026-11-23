@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const CONTENT_PIPELINE_VERSION = 3;
+const CONTENT_PIPELINE_VERSION = 4;
 
 function isMostlyChinese(text) {
   const sample = String(text || '')
@@ -29,13 +29,26 @@ function sections(markdown) {
 }
 
 function selectProductMarkdown(markdown,maxChars=24000) {
-  const exclude = /(install|setup|deploy|development|build from source|building from source|contribut|license|api reference|configuration|troubleshoot|benchmark detail|changelog|release notes|acknowledg|credits?|sponsors?|donat|安装|部署|开发|源码构建|参与开发|贡献|许可证|配置|故障排查|更新记录|致谢|感谢支持|赞助)/i;
+  const operational = /(install(?:ation|ing)?|setup|quick\s*start|getting\s*started|get\s*started|prerequisites?|requirements?|connect(?:ing)?\s+(?:a\s+)?(?:phone|device)|device\s+(?:connection|pairing)|run(?:ning)?\s+(?:locally|the\s+app)|usage|command(?:s|\s+line)?|deploy|development|build from source|building from source|contribut|license|api reference|configuration|troubleshoot|faq|benchmark detail|changelog|release notes|acknowledg|credits?|sponsors?|donat|开始使用|快速开始|入门指南|使用前准备|准备工作|需要准备什么|环境要求|系统要求|连接(?:手机|设备)|设备连接|设备配对|运行方式|命令行|选择.{0,12}服务|服务配置|下载安装|安装|部署|升级|卸载|开发|源码构建|参与开发|贡献|许可证|配置|常见问题|故障排查|更新记录|致谢|感谢支持|赞助)/i;
   const cleaned = String(markdown || '').replace(/```[\s\S]*?```/g,'').replace(/(?:\n\s*){3,}/g,'\n\n');
   const all = sections(cleaned);
-  // A detail view is a product-facing edition of the README, not a keyword
-  // excerpt. Preserve the author's narrative and original order, excluding
-  // only clearly operational or maintainer-facing sections.
-  const chosen=all.filter(section=>!section.heading || !exclude.test(section.heading));
+  // Keep the author's product narrative in order, but drop operational
+  // sections and all nested subsections beneath them. A detail page should
+  // help someone understand the product before sending setup work to GitHub.
+  const chosen=[];
+  let excludedLevel=null;
+  for (const section of all) {
+    const level=Number(section.level || 0);
+    if (excludedLevel!==null) {
+      if (level>excludedLevel) continue;
+      excludedLevel=null;
+    }
+    if (section.heading && operational.test(section.heading)) {
+      excludedLevel=level || 1;
+      continue;
+    }
+    chosen.push(section);
+  }
   const lines=chosen.map(section=>section.body.join('\n').trim()).filter(Boolean).join('\n\n').split('\n');
   const kept=[];
   let total=0;
