@@ -101,3 +101,23 @@ test('分类服务没有结论时保持旧项目原状态',()=>{
   const previous={status:'rejected',reject_streak:1,last_reason:'证据不足'};
   assert.equal(feed.nextQualityReview(previous,null),previous);
 });
+
+
+test('README 中相对图片和链接会解析成可访问的 GitHub 地址',()=>{
+  const markdown='<p align="center"><img src="./assets/hero.png"></p>\n[Quick start](docs/start.md)';
+  const resolved=content.resolveReadmeUrls(markdown,{full_name:'demo/product',default_branch:'main'});
+  assert.match(resolved,/raw\.githubusercontent\.com\/demo\/product\/main\/assets\/hero\.png/);
+  assert.match(resolved,/github\.com\/demo\/product\/blob\/main\/docs\/start\.md/);
+});
+
+test('翻译指令要求保留 HTML 结构和产品名',async()=>{
+  const prompts=[];
+  await content.prepareProjectContent({
+    readme:'# Pinky\n<p align="center">Control your phone.</p>',
+    repo:{full_name:'demo/pinky',default_branch:'main'},release:null,
+    freeAI:{enabled:()=>true,generate:async messages=>{prompts.push(messages);return '# Pinky\n<p align="center">控制你的手机。</p>';}}
+  });
+  const system=prompts[0][0].content;
+  assert.match(system,/HTML 标签、属性、URL、锚点、对齐方式和嵌套结构/);
+  assert.match(system,/项目名、产品名和专有名词保持原文/);
+});
