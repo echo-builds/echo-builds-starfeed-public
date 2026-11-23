@@ -776,7 +776,7 @@ function naturalSearchQuery(input) {
 function conservativeSearchCopy(item) {
   const original = String(item.description || '');
   if (/[㐀-鿿]/.test(original)) return {title:item.name,summary:original};
-  return {title:item.name,summary:original ? `仓库原始说明：${original}` : '该候选项目缺少可核验的仓库简介，请进入 README 确认具体能力。'};
+  return {title:item.name,summary:'暂未生成可靠的中文说明，请进入详情查看已经核验的能力和原文证据。'};
 }
 function searchResult(item, query) {
   const shaped = shape(item);
@@ -784,7 +784,9 @@ function searchResult(item, query) {
   const prepared = notes[repoKey(repo)];
   const aiCopy = item.ai_title || item.ai_summary ? {title:item.ai_title,summary:item.ai_summary} : null;
   const copy = prepared || aiCopy || conservativeSearchCopy(item);
-  return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:copy.summary,ai_bullets:item.ai_bullets || repo.ai_bullets,ai_limitations:item.ai_limitations || [],ai_evidence:item.ai_evidence || [],fitScore:item.fit_score,capabilityCoverage:item.capability_coverage,assessmentMode:item.assessment_mode,coverText:copy.summary};
+  const summary=String(copy.summary || '').trim();
+  const conciseSummary=summary.length>120 ? summary.slice(0,117).trimEnd()+'…' : summary;
+  return {...repo,originalDescription:repo.description,title:copy.title || repo.name,summary:conciseSummary,ai_bullets:item.ai_bullets || repo.ai_bullets,ai_limitations:item.ai_limitations || [],ai_evidence:item.ai_evidence || [],fitScore:item.fit_score,capabilityCoverage:item.capability_coverage,assessmentMode:item.assessment_mode,coverText:conciseSummary};
 }
 async function searchGitHub(input) {
   const query = input.trim();
@@ -811,7 +813,7 @@ async function searchGitHub(input) {
     if (!Array.isArray(data?.items)) throw new Error('No search results');
     state.search.items = data.items.filter(item=>validRepo(item) && !item.archived && !item.fork).map(item=>searchResult(item,query));
     state.search.hint = data.mode === 'ai'
-      ? `已理解为“${data.intent || query}”，找到 ${state.search.items.length} 个项目；已按 README 证据核对关键能力，主观体验仍需试听或实测`
+      ? `已理解为“${data.intent || query}”，找到 ${state.search.items.length} 个经过仓库资料核验的候选项目；自然度等主观体验仍需试听或实测`
       : `智能理解暂不可用，已使用通用降级检索找到 ${state.search.items.length} 个候选项目`;
   } catch {
     state.search.items = [];
@@ -1195,7 +1197,7 @@ async function hydrateReadme(repo,body,source,actions) {
     let response;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        response = await fetch('/api/project?repo=' + encodeURIComponent(repo.full_name) + '&content_version=3',{headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(60000)});
+        response = await fetch('/api/project?repo=' + encodeURIComponent(repo.full_name) + '&content_version=4',{headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(60000)});
         if (response.ok) break;
       } catch (error) {
         if (attempt) throw error;
