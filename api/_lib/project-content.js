@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const CONTENT_PIPELINE_VERSION = 4;
+const CONTENT_PIPELINE_VERSION = 5;
 
 function isMostlyChinese(text) {
   const sample = String(text || '')
@@ -29,8 +29,15 @@ function sections(markdown) {
 }
 
 function selectProductMarkdown(markdown,maxChars=24000) {
-  const operational = /(install(?:ation|ing)?|setup|quick\s*start|getting\s*started|get\s*started|prerequisites?|requirements?|connect(?:ing)?\s+(?:a\s+)?(?:phone|device)|device\s+(?:connection|pairing)|run(?:ning)?\s+(?:locally|the\s+app)|usage|command(?:s|\s+line)?|deploy|development|build from source|building from source|contribut|license|api reference|configuration|troubleshoot|faq|benchmark detail|changelog|release notes|acknowledg|credits?|sponsors?|donat|开始使用|快速开始|入门指南|使用前准备|准备工作|需要准备什么|环境要求|系统要求|连接(?:手机|设备)|设备连接|设备配对|运行方式|命令行|选择.{0,12}服务|服务配置|下载安装|安装|部署|升级|卸载|开发|源码构建|参与开发|贡献|许可证|配置|常见问题|故障排查|更新记录|致谢|感谢支持|赞助)/i;
-  const cleaned = String(markdown || '').replace(/```[\s\S]*?```/g,'').replace(/(?:\n\s*){3,}/g,'\n\n');
+  const operational = /(install(?:ation|ing)?|setup|quick\s*start|getting\s*started|get\s*started|using(?:\s+the)?|prerequisites?|requirements?|connect(?:ing)?\s+(?:a\s+)?(?:phone|device)|device\s+(?:connection|pairing)|run(?:ning)?\s+(?:locally|the\s+app)|usage|command(?:s|\s+line)?|deploy|development|build from source|building from source|contribut|license|api reference|configuration|troubleshoot|faq|benchmark detail|changelog|release notes|acknowledg|credits?|sponsors?|donat|开始使用|快速开始|入门指南|使用(?:方法|说明|指南|\s+[^\n]{0,40})|使用前准备|准备工作|需要准备什么|环境要求|系统要求|连接(?:手机|设备)|设备连接|设备配对|运行方式|命令行|选择.{0,12}服务|服务配置|下载安装|安装|部署|升级|卸载|开发|源码构建|参与开发|贡献|许可证|配置|常见问题|故障排查|更新记录|致谢|感谢支持|赞助)/i;
+  const cleaned = String(markdown || '')
+    .replace(/```[\s\S]*?```/g,'')
+    .replace(/<p\b[^>]*align=["']center["'][^>]*>[\s\S]*?<\/p>/gi,block=>{
+      const linkCount=(block.match(/<a\b/gi) || []).length;
+      const visible=block.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+      return linkCount>=2 && /(下载|开始使用|常见问题|discord|english|简体中文|日本語|türkçe|documentation|docs)/i.test(visible) ? '' : block;
+    })
+    .replace(/(?:\n\s*){3,}/g,'\n\n');
   const all = sections(cleaned);
   // Keep the author's product narrative in order, but drop operational
   // sections and all nested subsections beneath them. A detail page should
