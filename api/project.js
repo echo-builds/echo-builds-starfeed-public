@@ -60,7 +60,7 @@ async function storedProject(fullName) {
 
 module.exports=async function handler(req,res) {
   res.setHeader('X-Content-Type-Options','nosniff');
-  res.setHeader('Cache-Control','public, s-maxage=86400, stale-while-revalidate=604800');
+  res.setHeader('Cache-Control','private, no-store');
   if (req.method!=='GET') return res.status(405).json({error:'method_not_allowed'});
   const fullName=String(req.query?.repo || '').trim();
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(fullName)) return res.status(400).json({error:'invalid_repo'});
