@@ -50,6 +50,12 @@ test('README 表格按真实表格渲染并兼容行间空行',()=>{
 });
 
 
+test('搜索卡片不再回退展示长段英文仓库简介',()=>{
+  assert.match(html,/暂未生成可靠的中文说明/);
+  assert.doesNotMatch(html,/仓库原始说明：/);
+  assert.match(html,/经过仓库资料核验的候选项目/);
+});
+
 test('查看新项目后回到顶部，按钮进入无按钮状态',()=>{
   assert.doesNotMatch(html,/returnEventId/);
   assert.match(html,/button\.textContent=state\.newCount \? `有 \$\{state\.newCount\} 个新项目` : ''/);
@@ -69,7 +75,7 @@ test('README 翻译后保留标题、居中、链接、图片、表格和段落�
 
 test('推荐流详情会主动读取 V3 内容并绕开旧失败缓存',()=>{
   assert.match(html,/正在获取最新中文详情/);
-  assert.match(html,/content_version=3/);
+  assert.match(html,/content_version=4/);
   assert.match(html,/cache:'no-store'/);
   assert.match(project,/Cache-Control','private, no-store/);
 });
