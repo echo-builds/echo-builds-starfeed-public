@@ -178,7 +178,7 @@ function fallbackPlan(input) {
 async function planSearch(req,input) {
   try {
     const plan = await askModel(req,[
-      {role:'system',content:'把用户需求转换成 GitHub 仓库检索计划，只输出一个 JSON 对象，字段必须完全如下：{"intent":"中文意图","goal":"最终任务","core_capabilities":[{"name":"必须能力","evidence_terms":["2-6个可在仓库原文中核验的中英文短语"]}],"constraints":["明确限制或主观质量要求"],"workflow_queries":["2条完整产品检索词"],"localized_queries":["1条用户语言检索词"],"component_queries":["2条补充组件检索词"]}。GitHub 用空格表示 AND，检索词越多越容易零结果；以下格式是硬性要求：每条查询只能有2-3个用空格分隔的词或短语，不得写完整句、介词、连词、源语言到目标语言的完整方向，也不得把中文概念连成一个长词。规则：1. 用户原话中的输入、整体转换、输出形态和必须条件不能遗漏；媒介必须从输入贯穿到输出，不能把音频输出降成文本。复杂任务的每个关键能力单列，不得把多个步骤合并成一项“端到端转换”。2. workflow_queries 优先召回完整产品：第一条只保留用户对象与整体动作这两个产品类别词；第二条使用完整产品通常共同具备的2-3项高辨识度能力。查询必须使用仓库作者会写的产品类别和实现词，不做字面直译：音视频跨语言转换使用 dubbing、speech translation、transcription 等类别，不使用 translator、converter；多人音频按需求使用 speaker diarization、voice cloning、multi-speaker TTS。其他领域同样改写成真实仓库术语。不得加入 AI、system、tool、platform、pipeline 等泛词。3. localized_queries 使用用户主要语言，写成2-3个以空格分隔的最短产品概念；使用可实现的动作词，不用“自然”“对话”等主观结果词替代“翻译”“配音”“合成”等实现动作。用户用英文时可为空数组。4. component_queries 一条覆盖输入处理，一条覆盖目标输出生成，只用于补充组件，不能全是底层模型。5. 每项 evidence_terms 同时覆盖真实仓库常见的英文术语；当用户不是英文提问时，再加入1-2个用户语言中的仓库常用短语。对象与动作不可分时必须同时保留，不能用宽泛 i18n 冒充菜单翻译。6. 主观要求放 constraints；自然、音质、非 AI 腔只能作为待试听验证项，不得当成已经实测。7. 只加入用户需求确实涉及的术语，不得套用固定领域关键词。输出前自检：音视频翻译若仍出现 translator 或 converter，或中文查询没有空格，必须重写。'},
+      {role:'system',content:'把用户需求转换成 GitHub 仓库检索计划，只输出一个 JSON 对象，字段必须完全如下：{"intent":"中文意图","goal":"最终任务","core_capabilities":[{"name":"必须能力","evidence_terms":["2-6个可在仓库原文中核验的中英文短语"]}],"constraints":["明确限制或主观质量要求"],"workflow_queries":["2条完整产品检索词"],"localized_queries":["1条用户语言检索词"],"component_queries":["2条补充组件检索词"]}。GitHub 用空格表示 AND，检索词越多越容易零结果；以下格式是硬性要求：每条查询只能有2-3个用空格分隔的词或短语，不得写完整句、介词、连词、源语言到目标语言的完整方向，也不得把中文概念连成一个长词。规则：1. 用户原话中的输入、整体转换、输出形态和必须条件不能遗漏；媒介必须从输入贯穿到输出，不能把音频输出降成文本。复杂任务的每个关键能力单列，不得把多个步骤合并成一项“端到端转换”。2. workflow_queries 优先召回完整产品：第一条只保留用户对象与整体动作这两个产品类别词；第二条使用完整产品通常共同具备的2-3项高辨识度能力。查询必须使用仓库作者会写的产品类别和实现词，不做字面直译：音视频跨语言转换使用 dubbing、speech translation、transcription 等类别，不使用 translator、converter；多人音频按需求使用 speaker diarization、voice cloning、multi-speaker TTS。其他领域同样改写成真实仓库术语。不得加入 AI、system、tool、platform、pipeline 等泛词。3. localized_queries 使用用户主要语言，写成2-3个以空格分隔的最短产品概念；使用可实现的动作词，不用“自然”“对话”等主观结果词替代“翻译”“配音”“合成”等实现动作。用户用英文时可为空数组。4. component_queries 一条覆盖输入处理，一条覆盖目标输出生成，只用于补充组件，不能全是底层模型。5. 每项 evidence_terms 同时覆盖真实仓库常见的英文术语；当用户不是英文提问时，再加入1-2个用户语言中的仓库常用短语。对象与动作不可分时必须同时保留，不能用宽泛 i18n 冒充菜单翻译。6. 可从仓库资料客观核验的限制条件（如本地运行、自托管、离线、系统平台、无需密钥）必须同时列入 core_capabilities；constraints 只放自然度、音质、审美等必须试听或实测的主观要求，不得当成已经验证。每项 evidence_terms 都要同时提供仓库常见的具体短语和最短核心动作词，不能只给一个难以逐字命中的长短语。7. 只加入用户需求确实涉及的术语，不得套用固定领域关键词。输出前自检：音视频翻译若仍出现 translator 或 converter，或中文查询没有空格，必须重写。'},
       {role:'user',content:JSON.stringify({request:input})}
     ],1200);
     return normalizeAIPlan(plan,input);
@@ -368,9 +368,17 @@ function capabilityMatchCount(item,checks,primaryOnly = false) {
 }
 
 function minimumCapabilityCoverage(requiredCount) {
-  if (requiredCount <= 1) return 1;
-  if (requiredCount === 2) return .5;
-  return .4;
+  if (requiredCount <= 2) return 1;
+  if (requiredCount === 3) return 2 / 3;
+  return .6;
+}
+
+function verifiedSearchSummary(supported,missing) {
+  const matched=unique(supported,6);
+  const gaps=unique(missing,4);
+  if (!matched.length) return '仓库资料没有提供足够证据，暂不推荐。';
+  if (gaps.length) return clean(`已核验：${matched.join('、')}；尚未证明：${gaps.join('、')}`,120);
+  return clean(`仓库资料已同时证明：${matched.join('、')}`,120);
 }
 
 function primaryRequestChecks(input,checks) {
@@ -639,9 +647,11 @@ async function rankAndDescribe(req,input,plan,items) {
       const primarySatisfied = !primaryChecks.length || primaryChecks.some(check=>supported.includes(check));
       if (!primarySatisfied || coverage < minimumCapabilityCoverage(required.length)) continue;
       const {readme_excerpt,_search_query_index,_search_rank,_semantic_score,...repo} = item;
-      const summary = clean(decision.summary,170) || clean(item.description,150);
+      const generatedSummary = clean(decision.summary,120);
+      const missingNames=required.filter(check=>!supported.includes(check)).map(check=>check.name);
+      const summary = /[㐀-鿿]/.test(generatedSummary) ? generatedSummary : verifiedSearchSummary(supported.map(check=>check.name),missingNames);
       const gap = limitations[0] ? `不足：${limitations[0]}` : '';
-      evaluated.push({...repo,fit_score:fit,capability_coverage:coverage,semantic_score:Number(_semantic_score || 0),relevance_score:Math.round((fit * .55 + coverage * 25 + Number(_semantic_score || 0) * 20) * 10) / 10,rank_score:fit * .5 + coverage * 22 + Number(_semantic_score || 0) * 20 + popularityScore(item) * .08,assessment_mode:'ai_evaluated',ai_title:clean(decision.title,60) || item.name,ai_summary:clean([summary,gap].filter(Boolean).join('；'),220),ai_bullets:strengths,ai_limitations:limitations,ai_evidence:validClaims.map(claim=>clean(claim.evidence_quote,220)).slice(0,4),matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched});
+      evaluated.push({...repo,fit_score:fit,capability_coverage:coverage,semantic_score:Number(_semantic_score || 0),relevance_score:Math.round((fit * .55 + coverage * 25 + Number(_semantic_score || 0) * 20) * 10) / 10,rank_score:fit * .5 + coverage * 22 + Number(_semantic_score || 0) * 20 + popularityScore(item) * .08,assessment_mode:'ai_evaluated',ai_title:clean(decision.title,60) || item.name,ai_summary:clean([summary,gap].filter(Boolean).join('；'),120),ai_bullets:strengths,ai_limitations:limitations,ai_evidence:validClaims.map(claim=>clean(claim.evidence_quote,220)).slice(0,4),matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched});
     }
     if (evaluated.length) return evaluated.sort((a,b)=>b.capability_coverage-a.capability_coverage || b.rank_score-a.rank_score || Number(b.stargazers_count || 0)-Number(a.stargazers_count || 0)).slice(0,8);
   } catch {}
@@ -653,25 +663,17 @@ async function rankAndDescribe(req,input,plan,items) {
     if (!primarySatisfied || coverage < minimumCapabilityCoverage(required.length)) return null;
     const {readme_excerpt,_search_query_index,_search_rank,_semantic_score,...repo} = item;
     const queryPriority = Math.max(0,100 - Number(item._search_query_index ?? 6) * 15 - Number(item._search_rank ?? 20) * 2);
+    const supportedNames=supported.map(check=>check.name);
     const evidenceLimits = [
       ...(missing.length ? [`尚未核验：${missing.join('、')}`] : []),
-      '当前仅依据仓库资料核对相关能力，尚未验证这些能力已组成可直接使用的完整工作流',
+      ...(missing.length ? ['仓库资料还不能证明这是完整可用的端到端方案'] : []),
       '自然度、音质和实际使用体验尚未试听或实测，不能保证'
     ];
-    return {...repo,fit_score:Math.round(coverage * 100),capability_coverage:coverage,semantic_score:Number(_semantic_score || 0),relevance_score:Math.round((coverage * 80 + Number(_semantic_score || 0) * 20) * 10) / 10,rank_score:coverage * 70 + Number(_semantic_score || 0) * 24 + queryPriority * .06,assessment_mode:'evidence_fallback',ai_title:item.name,ai_summary:clean([`仓库资料命中：${supported.map(check=>check.name).join('、') || '与需求相关的能力'}`,missing.length ? `未核验：${missing.join('、')}` : '',item.description || ''].filter(Boolean).join('；'),220),ai_bullets:supported.map(check=>`README 或仓库简介包含与“${check.name}”相关的证据`).slice(0,3),ai_limitations:evidenceLimits,ai_evidence:item.description ? [clean(item.description,220)] : [],matched_capabilities:supported.map(check=>check.name),matched_evidence_count:matched};
+    return {...repo,fit_score:Math.round(coverage * 100),capability_coverage:coverage,semantic_score:Number(_semantic_score || 0),relevance_score:Math.round((coverage * 80 + Number(_semantic_score || 0) * 20) * 10) / 10,rank_score:coverage * 70 + Number(_semantic_score || 0) * 24 + queryPriority * .06,assessment_mode:'evidence_fallback',ai_title:item.name,ai_summary:verifiedSearchSummary(supportedNames,missing),ai_bullets:supportedNames.map(name=>`仓库资料包含“${name}”的逐字证据`).slice(0,3),ai_limitations:evidenceLimits,ai_evidence:item.description ? [clean(item.description,220)] : [],matched_capabilities:supportedNames,matched_evidence_count:matched};
   }).filter(Boolean);
-  const included = new Set(partial.map(item=>item.full_name.toLowerCase()));
-  const semanticCandidates = pool.filter(({item})=>
-    !included.has(String(item.full_name || '').toLowerCase()) &&
-    Number(item._semantic_score || 0) >= .62 &&
-    Number(item._search_query_index ?? 99) < priorityQueryCount
-  ).map(({item,matched})=>{
-    const {readme_excerpt,_search_query_index,_search_rank,_semantic_score,...repo} = item;
-    const verifiedCount = required.length ? capabilityMatchCount(item,required) : 0;
-    const coverage = required.length ? verifiedCount / required.length : 0;
-    return {...repo,fit_score:Math.round(Number(_semantic_score || 0) * 100),capability_coverage:coverage,semantic_score:Number(_semantic_score || 0),relevance_score:Math.round(Number(_semantic_score || 0) * 1000) / 10,rank_score:95 + Number(_semantic_score || 0),assessment_mode:'semantic_evidence',ai_title:item.name,ai_summary:clean([`仓库简介与整句需求高度相关`,item.description || ''].filter(Boolean).join('；'),220),ai_bullets:[],ai_limitations:['自动证据尚未逐项核验全部核心能力，请进入 README 确认完整流程','自然度、音质和实际使用体验尚未试听或实测，不能保证'],ai_evidence:item.description ? [clean(item.description,220)] : [],matched_capabilities:[],matched_evidence_count:matched};
-  });
-  const combined = [...partial,...semanticCandidates].sort((a,b)=>b.rank_score-a.rank_score || b.semantic_score-a.semantic_score).slice(0,6);
+  // Semantic similarity can change order, but it can never make an
+  // unverified candidate eligible for display.
+  const combined = partial.sort((a,b)=>b.rank_score-a.rank_score || b.semantic_score-a.semantic_score).slice(0,6);
   if (combined.length) return combined;
   const direct = eligible.filter(item=>primaryCapabilityEvidenceSupported(item,required));
   return fallbackRank(plan,direct.length ? direct : eligible,{allowReadmeEvidence:!direct.length});
@@ -738,5 +740,5 @@ module.exports = async function handler(req,res) {
   }
 };
 
-module.exports._test = {activeQuerySpecs,activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,cosineSimilarity,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,githubSearchScope,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional,withSemanticScores};
+module.exports._test = {activeQuerySpecs,activityScore,buildRankingPool,capabilityChecks,capabilityClaimsSupported,capabilityEvidenceSupported,capabilityEvidenceSupportedInText,capabilityMatchCount,collectDiversifiedCandidates,complementaryQueries,cosineSimilarity,deriveCapabilitySignature,evidenceCoverage,evidenceSupported,expandComplexEvidence,fallbackPlan,fallbackRank,githubSearchScope,isCollectionCandidate,isInstructionalCandidate,listText,meaningUnits,metadataQuality,minimumCapabilityCoverage,verifiedSearchSummary,normalizeAIPlan,normalizeGithubQuery,planQuerySpecs,popularityScore,primaryCapabilityEvidenceSupported,primaryRequestChecks,quoteMatchesCheck,requestEvidenceSupported,selectReadmeExcerpt,stemToken,supportedCapabilityClaims,tokenSet,unique,wantsCollection,wantsInstructional,withSemanticScores};
 
