@@ -121,3 +121,12 @@ test('翻译指令要求保留 HTML 结构和产品名',async()=>{
   assert.match(system,/HTML 标签、属性、URL、锚点、对齐方式和嵌套结构/);
   assert.match(system,/项目名、产品名和专有名词保持原文/);
 });
+
+
+test('仓库自带简体中文 README 时优先使用官方中文版本',()=>{
+  const paths=feed.localizedChineseReadmePaths(
+    '<a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a>',
+    {full_name:'DIYgod/pinky',default_branch:'main'}
+  );
+  assert.deepEqual(paths,['README.zh-CN.md']);
+});
