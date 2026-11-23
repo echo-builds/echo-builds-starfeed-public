@@ -108,13 +108,37 @@ async function trendingRepos() {
   }
   return result;
 }
-async function readme(repo) {
+function localizedChineseReadmePaths(markdown,repo) {
+  const paths=[];
+  const add=value=>{
+    let candidate=String(value || '').trim().replace(/^<|>$/g,'').split(/[?#]/)[0];
+    try { candidate=decodeURIComponent(candidate); } catch {}
+    const githubPrefix=`https://github.com/${repo.full_name}/blob/${repo.default_branch || 'main'}/`;
+    if (candidate.startsWith(githubPrefix)) candidate=candidate.slice(githubPrefix.length);
+    if (/^https?:\/\//i.test(candidate) || candidate.startsWith('/')) return;
+    candidate=candidate.replace(/^\.\//,'');
+    if (!/readme/i.test(candidate) || !/(?:zh[-_.]?(?:cn|hans)|chinese|简体)/i.test(candidate)) return;
+    if (!paths.includes(candidate)) paths.push(candidate);
+  };
+  for (const match of String(markdown || '').matchAll(/(?:href=["']|\]\()([^"'()\s>]+)/gi)) add(match[1]);
+  return paths;
+}
+async function rawReadme(repo,path='README.md') {
   try {
     const branch=encodeURIComponent(repo.default_branch || 'main');
-    const response=await fetch(`https://raw.githubusercontent.com/${repo.full_name}/${branch}/README.md`,{headers:{'User-Agent':'RepoScroll-Feed'},signal:AbortSignal.timeout(12000)});
+    const encodedPath=path.split('/').map(encodeURIComponent).join('/');
+    const response=await fetch(`https://raw.githubusercontent.com/${repo.full_name}/${branch}/${encodedPath}`,{headers:{'User-Agent':'RepoScroll-Feed'},signal:AbortSignal.timeout(12000)});
     if (response.ok) return (await response.text()).slice(0,60000);
   } catch {}
   return '';
+}
+async function readme(repo) {
+  const primary=await rawReadme(repo);
+  for (const path of localizedChineseReadmePaths(primary,repo)) {
+    const localized=await rawReadme(repo,path);
+    if (localized.length>400 && hasChinese(localized)) return localized;
+  }
+  return primary;
 }
 function resolveAsset(value,repo) {
   const raw=String(value || '').trim().replace(/^<|>$/g,'');
@@ -433,4 +457,4 @@ async function main() {
 
 if (require.main===module) main().catch(error=>{ console.error(error); process.exitCode=1; });
 
-module.exports._test={balancedEntries,readmeImages,coverFrom,attentionTag,laneFor,nextQualityReview,shouldRemoveExisting,isCollection,hardRejectReason,canRemoveAtFloor};
+module.exports._test={balancedEntries,readmeImages,coverFrom,attentionTag,laneFor,nextQualityReview,shouldRemoveExisting,isCollection,hardRejectReason,canRemoveAtFloor,localizedChineseReadmePaths};
