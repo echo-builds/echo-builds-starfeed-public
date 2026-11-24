@@ -32,15 +32,17 @@ test('推荐流详情优先使用数据库预处理中文，不再现场展示�
   assert.doesNotThrow(()=>new Function('require','module','exports',project));
 });
 
-test('卡片只接受三种关注标签且与 Star 同行展示',()=>{
-  assert.match(html,/new Set\(\['重要更新','GitHub Trending','近期爆发'\]\)/);
+test('卡片只展示推荐原因，不展示更新状态',()=>{
+  assert.match(html,/new Set\(\['GitHub Trending','近期爆发'\]\)/);
+  assert.doesNotMatch(html,/feed_event_type==='release'\?'重要更新'/);
   assert.match(html,/class="card-meta"><span class="stars"><\/span><span class="published"><\/span>/);
 });
 
-test('数据库时间线不会混入静态精选并按事件倒序',()=>{
+test('数据库时间线不会混入静态精选并保持更新批次与续看顺序',()=>{
   const block=html.slice(html.indexOf('async function loadDiscover'),html.indexOf('function readFavorites'));
   assert.match(block,/current\.filter\(repo=>repo\.feed_event_id\)/);
-  assert.match(block,/feed_timeline_position/);
+  assert.match(block,/uniqueProjects\(\[\.\.\.state\.updateBatch/);
+  assert.doesNotMatch(block,/\.sort\(/);
 });
 
 test('README 表格按真实表格渲染并兼容行间空行',()=>{
@@ -57,10 +59,14 @@ test('搜索卡片不再回退展示长段英文仓库简介',()=>{
   assert.match(html,/经过仓库资料核验的候选项目/);
 });
 
-test('查看新项目后回到顶部，按钮进入无按钮状态',()=>{
-  assert.doesNotMatch(html,/returnEventId/);
-  assert.match(html,/button\.textContent=state\.newCount \? `有 \$\{state\.newCount\} 个新项目` : ''/);
-  assert.match(html,/state\.newCount=0/);
+test('回访时直接展示更新批次，读完后继续上次位置',()=>{
+  assert.doesNotMatch(html,/id="new-projects"/);
+  assert.match(html,/你离开后更新了 \$\{count\} 个项目/);
+  assert.match(html,/本次更新已看完/);
+  assert.match(html,/下面从你上次看到的位置继续/);
+  assert.match(html,/dataset\.updateCard = 'true'/);
+  assert.match(html,/updateBoundaryObserver/);
+  assert.doesNotMatch(html,/behavior:'smooth'/);
 });
 
 test('README 翻译后保留标题、居中、链接、图片、表格和段落结构',()=>{
