@@ -21,6 +21,13 @@ test('历史回填不会触发新项目提示',()=>{
   assert.match(feed,/event_type<>'classic'/);
 });
 
+test('回访只读取离开后的真实更新，并从上次位置继续',()=>{
+  assert.match(feed,/updatesOnly && seen/);
+  assert.match(feed,/e\.event_type<>'classic' AND e\.id > \$\{seen\}/);
+  assert.match(feed,/SELECT timeline_position FROM feed_events WHERE id=\$\{resume\}/);
+  assert.match(feed,/e\.timeline_position <= \$\{anchorPosition\}/);
+});
+
 test('每天后台审核一批历史经典项目',()=>{
   assert.match(workflow,/cron: '43 4 \* \* \*'/);
   assert.match(workflow,/--backfill=/);
