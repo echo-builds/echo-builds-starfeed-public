@@ -25,20 +25,42 @@ module.exports = async function handler(req,res) {
   res.setHeader('X-Content-Type-Options','nosniff');
   if (req.method !== 'GET') return res.status(405).json({error:'method_not_allowed'});
   if (!configured()) return res.status(503).json({error:'feed_database_not_configured'});
-  const limit = integer(req.query?.limit,1,40,20);
+  const limit = integer(req.query?.limit,1,100,20);
   const before = integer(req.query?.before,1,Number.MAX_SAFE_INTEGER,null);
   const seen = integer(req.query?.seen,1,Number.MAX_SAFE_INTEGER,null);
+  const resume = integer(req.query?.resume,1,Number.MAX_SAFE_INTEGER,null);
+  const updatesOnly = req.query?.updates === '1';
   try {
     const db = sql();
-    const rows = before
+    const anchorRows = resume
+      ? await db`SELECT timeline_position FROM feed_events WHERE id=${resume} AND status='published' LIMIT 1`
+      : [];
+    const anchorPosition = anchorRows[0]?.timeline_position ? Number(anchorRows[0].timeline_position) : null;
+    const rows = updatesOnly && seen
       ? await db`
+          SELECT e.id AS feed_event_id,e.timeline_position,e.event_type,e.published_at AS feed_published_at,
+            e.selection_reason,e.release_payload,p.payload
+          FROM feed_events e
+          JOIN projects p ON p.full_name_key=e.project_full_name_key
+          WHERE e.status='published' AND e.event_type<>'classic' AND e.id > ${seen}
+          ORDER BY e.timeline_position DESC LIMIT ${limit + 1}`
+      : before
+        ? await db`
           SELECT e.id AS feed_event_id,e.timeline_position,e.event_type,e.published_at AS feed_published_at,
             e.selection_reason,e.release_payload,p.payload
           FROM feed_events e
           JOIN projects p ON p.full_name_key=e.project_full_name_key
           WHERE e.status='published' AND e.timeline_position < ${before}
           ORDER BY e.timeline_position DESC LIMIT ${limit + 1}`
-      : await db`
+        : anchorPosition
+          ? await db`
+          SELECT e.id AS feed_event_id,e.timeline_position,e.event_type,e.published_at AS feed_published_at,
+            e.selection_reason,e.release_payload,p.payload
+          FROM feed_events e
+          JOIN projects p ON p.full_name_key=e.project_full_name_key
+          WHERE e.status='published' AND e.timeline_position <= ${anchorPosition}
+          ORDER BY e.timeline_position DESC LIMIT ${limit + 1}`
+          : await db`
           SELECT e.id AS feed_event_id,e.timeline_position,e.event_type,e.published_at AS feed_published_at,
             e.selection_reason,e.release_payload,p.payload
           FROM feed_events e
@@ -57,6 +79,7 @@ module.exports = async function handler(req,res) {
       new_count:Number(countRows[0]?.count || 0),
       next_cursor:hasMore && page.length ? Number(page[page.length - 1].timeline_position) : null,
       has_more:hasMore,
+      mode:updatesOnly ? 'updates' : anchorPosition ? 'resume' : before ? 'older' : 'latest',
       source:'persistent_feed'
     });
   } catch(error) {
