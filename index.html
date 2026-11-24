@@ -38,8 +38,13 @@ main{max-width:1080px;margin:auto;padding:20px 12px calc(88px + env(safe-area-in
 h1{font-size:31px;line-height:1.15;letter-spacing:-.03em;margin:0 0 5px}
 .heading p,.status{font-size:13px;color:var(--muted);margin:0}
 .status{margin:0 3px 11px;font-size:11px}
-.new-projects{position:fixed;z-index:5;top:calc(64px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);border:0;border-radius:999px;background:var(--ink);color:#fff;padding:9px 15px;font-size:12px;font-weight:750;box-shadow:0 8px 24px #18120d2e}
 .feed{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px 9px}
+.return-update,.update-divider{grid-column:1/-1}
+.return-update{padding:3px 3px 7px}
+.return-update strong{display:block;font-size:18px;line-height:1.35;letter-spacing:-.015em}
+.update-divider{margin:10px 3px 7px;padding:15px 8px;border-block:1px solid var(--rule);text-align:center;color:var(--muted)}
+.update-divider strong{display:block;color:var(--ink);font-size:14px}
+.update-divider span{display:block;margin-top:2px;font-size:12px}
 .feed-sentinel{min-height:72px;display:grid;place-items:center;color:var(--muted);font-size:12px;text-align:center}
 .card{background:white;border:1px solid var(--rule);border-radius:11px;min-width:0;overflow:hidden}
 .project{display:block;width:100%;padding:0;border:0;background:none;text-align:left}
@@ -182,7 +187,6 @@ dialog::backdrop{background:#18161280}
       <p id="lede">从产品经理视角，发现并看懂值得关注的开源项目</p>
     </section>
     <p id="status" class="status" role="status" hidden></p>
-    <button id="new-projects" class="new-projects" type="button" hidden></button>
     <section id="feed" class="feed" aria-label="项目"></section>
     <div id="feed-sentinel" class="feed-sentinel" aria-live="polite">继续下滑，发现更早收录的项目</div>
     <div id="groups" hidden></div>
@@ -249,7 +253,7 @@ const DAY = 86400000;
 const DISCOVERY_WINDOW_DAYS = 14;
 const ignored = new Set(['ai','open-source','javascript','typescript','python','react','opensource','web','app','github','go','rust','self-hosted','nextjs','docker']);
 const repoKey = ({full_name}) => full_name.toLowerCase();
-const feedKey = repo => repo.feed_event_id ? 'event:' + repo.feed_event_id : 'repo:' + repoKey(repo);
+const feedKey = repo => 'repo:' + repoKey(repo);
 
 function topicsOf(repo) {
   return [...new Set((repo.topics || []).filter(t => typeof t === 'string' && /^[a-z0-9][a-z0-9-]{1,39}$/.test(t) && !ignored.has(t)))];
@@ -520,6 +524,9 @@ const state = {
   timelineAvailable:null,
   newCount:0,
   feedHead:null,
+  updateBatch:[],
+  updateSessionHead:null,
+  updatesRead:false,
   restorePending:true,
   restorePages:0,
   lastFetch:0,
@@ -660,6 +667,22 @@ async function prepareDiscoveryCopy(items) {
     clearTimeout(timeout);
   }
 }
+async function fetchTimeline(params) {
+  const response = await fetch('/api/feed?' + new URLSearchParams(params),{
+    headers:{Accept:'application/json'},signal:AbortSignal.timeout(30000)
+  });
+  if (!response.ok) {
+    const error = new Error('Feed HTTP ' + response.status);
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+function uniqueProjects(items) {
+  const unique = new Map();
+  for (const item of items) if (!unique.has(feedKey(item))) unique.set(feedKey(item),item);
+  return [...unique.values()];
+}
 async function loadDiscover({reset = false} = {}) {
   if (state.loadingMore || (state.discoveryDone && !reset)) return;
   state.loadingMore = true;
@@ -676,35 +699,55 @@ async function loadDiscover({reset = false} = {}) {
   const cursor = state.discoveryCursor;
   let incoming = [];
   try {
-    let response;
     let data;
     if (state.timelineAvailable !== false) {
-      const params = new URLSearchParams({limit:'20'});
-      if (!reset && cursor) params.set('before',String(cursor));
-      if (state.progress.latest_seen_event_id) params.set('seen',String(state.progress.latest_seen_event_id));
-      response = await fetch('/api/feed?' + params,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(30000)});
-      if (response.ok) {
-        data = await response.json();
+      try {
+        if (reset) {
+          const seen = Number(state.progress.latest_seen_event_id || 0);
+          const resume = Number(state.progress.resume_event_id || 0);
+          const updates = seen ? await fetchTimeline({limit:'100',updates:'1',seen:String(seen)}) : {items:[]};
+          const mainParams = {limit:'20'};
+          if (resume) mainParams.resume=String(resume);
+          data = await fetchTimeline(mainParams);
+          state.updateBatch = uniqueProjects((updates.items || []).map(shape));
+          state.updateSessionHead = Number(data.head_id || updates.head_id || 0) || null;
+          state.updatesRead = false;
+          state.newCount = state.updateBatch.length;
+          incoming = uniqueProjects([...state.updateBatch,...(data.items || []).map(shape)]);
+          state.restorePending = false;
+          if (!seen || !state.updateBatch.length) saveProgress({latest:state.updateSessionHead});
+        } else {
+          const params={limit:'20'};
+          if (cursor) params.before=String(cursor);
+          data = await fetchTimeline(params);
+          incoming = (data.items || []).map(shape);
+        }
         state.timelineAvailable = true;
-      } else if ([404,503].includes(response.status)) {
-        state.timelineAvailable = false;
-      } else if (response.status < 500) throw new Error('Feed HTTP ' + response.status);
+      } catch(error) {
+        if ([404,503].includes(error.status)) state.timelineAvailable = false;
+        else throw error;
+      }
     }
     if (!data) {
       const page = Number(cursor || 1);
-      response = await fetch('/api/discover?page=' + page + '&quality=4',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
+      const response = await fetch('/api/discover?page=' + page + '&quality=4',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
       if (!response.ok) throw new Error('Discover HTTP ' + response.status);
       data = await response.json();
       data.next_cursor = Number(data.next_page || page + 1);
+      incoming = (Array.isArray(data?.items) ? data.items : []).map(shape);
+      if (reset) {
+        state.updateBatch=[];
+        state.updateSessionHead=null;
+        state.newCount=0;
+      }
     }
-    incoming = (Array.isArray(data?.items) ? data.items : []).map(shape);
     const merged = new Map();
     if (state.timelineAvailable) {
       // The persistent feed is the source of truth. Static examples and an old
       // discover cache must never be interleaved with the chronological feed.
       const ordered=reset?[incoming]:[current.filter(repo=>repo.feed_event_id),incoming];
       for (const group of ordered) for (const repo of group) if (!merged.has(feedKey(repo))) merged.set(feedKey(repo),repo);
-      state.catalog=[...merged.values()].sort((a,b)=>Number(b.feed_timeline_position || b.feed_event_id || 0)-Number(a.feed_timeline_position || a.feed_event_id || 0));
+      state.catalog=[...merged.values()];
     } else {
       const ordered=reset?[incoming,current]:[current,incoming];
       for (const group of ordered) for (const repo of group) if (!merged.has(feedKey(repo))) merged.set(feedKey(repo),repo);
@@ -716,7 +759,6 @@ async function loadDiscover({reset = false} = {}) {
     }
     state.discoveryCursor = data.next_cursor ?? data.next_page ?? null;
     state.discoveryDone = data.has_more === false || incoming.length === 0;
-    state.newCount = reset && state.timelineAvailable ? Number(data.new_count || 0) : state.newCount;
     state.feedHead = state.timelineAvailable ? Number(data.head_id || state.feedHead || 0) || null : state.feedHead;
     state.date = today();
     state.source = state.timelineAvailable ? 'timeline' : 'live';
@@ -744,7 +786,6 @@ async function loadDiscover({reset = false} = {}) {
         if (state.restorePending) restoreReadingPosition();
       }
     }
-    updateNewProjectsButton();
     openRouteDetail();
   }
 }
@@ -825,22 +866,42 @@ async function searchGitHub(input) {
     window.scrollTo(0,0);
   }
 }
-function card(repo) {
+function card(repo,{update = false} = {}) {
   const el = $('#card-template').content.firstElementChild.cloneNode(true);
   el.querySelector('h2').textContent = titleOf(repo);
   el.querySelector('.stars').textContent = '★ ' + (repo.approximate ? '约 ' : '') + compact.format(repo.stargazers_count);
   const published=el.querySelector('.published');
-  const allowedTags=new Set(['重要更新','GitHub Trending','近期爆发']);
-  const attentionTag=allowedTags.has(repo.attention_tag)?repo.attention_tag:(repo.feed_event_type==='release'?'重要更新':'');
+  const allowedTags=new Set(['GitHub Trending','近期爆发']);
+  const attentionTag=allowedTags.has(repo.attention_tag)?repo.attention_tag:'';
   if (attentionTag) published.textContent=attentionTag;
   else published.remove();
   fillCover(el.querySelector('.cover'),repo);
   const trigger = el.querySelector('.project');
   trigger.dataset.project = repoKey(repo);
   if (repo.feed_event_id) trigger.dataset.feedEvent = String(repo.feed_event_id);
+  if (update) trigger.dataset.updateCard = 'true';
   trigger.setAttribute('aria-label',`${titleOf(repo)}，查看项目详情`);
   trigger.addEventListener('click',()=>openDetails(repo,trigger));
   return el;
+}
+function returnUpdateIntro(count) {
+  const intro=document.createElement('section');
+  intro.className='return-update';
+  const title=document.createElement('strong');
+  title.textContent=`你离开后更新了 ${count} 个项目`;
+  intro.append(title);
+  return intro;
+}
+function returnUpdateDivider() {
+  const divider=document.createElement('div');
+  divider.className='update-divider';
+  divider.dataset.updateBoundary='true';
+  const title=document.createElement('strong');
+  title.textContent='本次更新已看完';
+  const note=document.createElement('span');
+  note.textContent='下面从你上次看到的位置继续';
+  divider.append(title,note);
+  return divider;
 }
 function searchSkeleton() {
   const el = document.createElement('article');
@@ -1342,17 +1403,21 @@ function saveProgress({latest,resume} = {}) {
   }).catch(()=>{}),800);
 }
 const readingObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries=>{
-  const visible=entries.filter(entry=>entry.isIntersecting && entry.intersectionRatio>=.55 && entry.target.dataset.feedEvent);
+  const visible=entries.filter(entry=>entry.isIntersecting && entry.intersectionRatio>=.55 && entry.target.dataset.feedEvent && entry.target.dataset.updateCard!=='true');
   if (!visible.length) return;
   const ordered=visible.sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);
   const resume=Number(ordered[0].target.dataset.feedEvent);
-  const latest=Math.max(...visible.map(entry=>Number(entry.target.dataset.feedEvent)));
-  saveProgress({latest,resume});
-  if (state.feedHead && Number(state.progress.latest_seen_event_id)>=state.feedHead) {
-    state.newCount=0;
-    updateNewProjectsButton();
-  }
+  saveProgress({resume});
 },{threshold:[.55]}) : null;
+function markUpdateBatchRead() {
+  if (!state.updateBatch.length || state.updatesRead) return;
+  state.updatesRead=true;
+  state.newCount=0;
+  saveProgress({latest:state.updateSessionHead});
+}
+const updateBoundaryObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries=>{
+  if (entries.some(entry=>entry.isIntersecting && entry.intersectionRatio>=.5)) markUpdateBatchRead();
+},{threshold:[.5]}) : null;
 function observeCards(feed) {
   if (masonry) feed.classList.add('masonry');
   for (const item of feed.children) {
@@ -1360,11 +1425,6 @@ function observeCards(feed) {
     const trigger=item.querySelector?.('[data-feed-event]');
     if (trigger) readingObserver?.observe(trigger);
   }
-}
-function updateNewProjectsButton() {
-  const button=$('#new-projects');
-  button.textContent=state.newCount ? `有 ${state.newCount} 个新项目` : '';
-  button.hidden=state.view!=='discover' || state.newCount<1;
 }
 function restoreReadingPosition() {
   if (!state.restorePending || state.newCount<1 && !state.progress.resume_event_id) return;
@@ -1407,6 +1467,7 @@ function render() {
     state.refreshError ? '暂时无法继续加载，向上滑动后再试' : '继续下滑，发现更早收录的项目';
   masonry?.disconnect();
   readingObserver?.disconnect();
+  updateBoundaryObserver?.disconnect();
   feed.replaceChildren();
   groups.replaceChildren();
   if (savedView) {
@@ -1424,6 +1485,16 @@ function render() {
     }
   } else if (searchView && state.search.loading) {
     feed.append(...Array.from({length:6},searchSkeleton));
+  } else if (!searchView && state.updateBatch.length) {
+    const updateKeys=new Set(state.updateBatch.map(feedKey));
+    const updates=items.filter(item=>updateKeys.has(feedKey(item)));
+    const previousItems=items.filter(item=>!updateKeys.has(feedKey(item)));
+    feed.append(returnUpdateIntro(updates.length));
+    feed.append(...updates.map(item=>card(item,{update:true})));
+    const divider=returnUpdateDivider();
+    feed.append(divider,...previousItems.map(card));
+    observeCards(feed);
+    updateBoundaryObserver?.observe(divider);
   } else {
     feed.append(...items.map(card));
     observeCards(feed);
@@ -1434,7 +1505,6 @@ function render() {
   empty.querySelector('p').textContent = savedView ? '打开项目详情后，可以把想留着看的项目收进这里。' : searchView ? '换一个更具体的说法，说明输入、期望结果和必须满足的条件。' : '晚点再回来发现新项目。';
   empty.querySelector('button').hidden = !savedView;
   updateStatus();
-  updateNewProjectsButton();
   if (!savedView && !searchView) restoreReadingPosition();
 }
 function go(view) {
@@ -1585,12 +1655,6 @@ $('#search-form').addEventListener('submit',event=>{ event.preventDefault(); sea
 $('#project-search').addEventListener('input',event=>{ $('#search-clear').hidden = !event.target.value; });
 $('#search-clear').addEventListener('click',()=>{ go('discover'); $('#project-search').focus(); });
 $('#empty button').addEventListener('click',()=>go('discover'));
-$('#new-projects').addEventListener('click',()=>{
-  state.newCount=0;
-  if (state.feedHead) saveProgress({latest:state.feedHead});
-  updateNewProjectsButton();
-  window.scrollTo({top:0,behavior:'smooth'});
-});
 let pullStart=null;
 document.addEventListener('touchstart',event=>{
   if (scrollY<=0 && event.touches.length===1) pullStart=event.touches[0].clientY;
